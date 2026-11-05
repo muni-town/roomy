@@ -18,6 +18,12 @@
  *
  * Run while the appserver is stopped, or expect SQLITE_BUSY retries — the
  * script sets a busy timeout.
+ *
+ * A follower that has already committed a cursor will never read the rows this
+ * script inserts below it: the worker asks the feed for `idx > cursor`. Running
+ * a backfill while a follower has been running therefore requires deleting that
+ * follower's per-space DBs; restarting the follower is not enough, because the
+ * cursor it resumes from is what skips the new rows.
  */
 
 import { readFileSync } from "node:fs";

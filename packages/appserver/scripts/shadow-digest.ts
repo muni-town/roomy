@@ -43,6 +43,15 @@
  * differ, both values truncated to 80 characters, a blob reported as its size.
  * A table name alone has already been read as a finding when it was noise.
  *
+ * **Clock skew.** A row's `created_at`/`updated_at` record when it was
+ * written. The production write path stamps them with the wall clock; a
+ * rebuild stamps them from the change's place in the log, and no replay can
+ * recover the second a historical row was written. A divergent table whose
+ * rows are equal once those columns are dropped is therefore `clock-only`; any
+ * other divergence is `content`. Both are still compared and still count as a
+ * divergence, but the summary leads with `content` tables because `clock-only`
+ * ones cannot be fixed by the shadow.
+ *
  * **Why a space was not compared.** Every report says whether the shadow DB
  * file exists, so "the worker applied no feed rows" (`rustCursor: null`,
  * `rustDbPresent: true`) reads differently from "the shadow never created the
@@ -121,9 +130,22 @@ export interface TableDifference {
   tsRows: number;
   /** Rows on the shadow side. */
   rustRows: number;
+  /**
+   * What the two sides disagree on: `clock-only` when they differ only in
+   * `created_at`/`updated_at`, `content` otherwise.
+   */
+  kind: DifferenceKind;
   /** The first differing row, in canonical order; null if none could be paired. */
   example: RowDifference | null;
 }
+
+/**
+ * What a divergent table differs in. `clock-only` means every column that
+ * differs is one of `WALL_CLOCK_COLUMNS`; `content` means a value the log
+ * determines differs, a row exists on one side only, or the two sides declare
+ * different columns.
+ */
+export type DifferenceKind = "content" | "clock-only";
 
 /** One space's classification and, when compared, what the comparison found. */
 export interface SpaceDigest {
@@ -254,6 +276,17 @@ const ABSENT_COLUMN = "(no column)";
 
 /** A column the other side's schema does not declare. */
 const NO_COLUMN = Symbol("no column");
+
+/**
+ * The columns that record when a row was written rather than what it holds.
+ * Dropping them from both readings and comparing again tells a disagreement
+ * about history (the TS write path stamps the wall clock, a rebuild stamps the
+ * log's time) apart from one about state.
+ */
+const WALL_CLOCK_COLUMNS: Readonly<Record<string, true>> = {
+  created_at: true,
+  updated_at: true,
+};
 
 /** A value's exact form, for comparing rows and pairing them by key. */
 function encoded(value: unknown): string {
@@ -436,6 +469,45 @@ function positionalExample(
   return null;
 }
 
+/**
+ * Whether two readings of a divergent table disagree only on their wall-clock
+ * columns: equal once `created_at` and `updated_at` are dropped. A reading
+ * that declares different columns at all is content, and so is a row held on
+ * one side only.
+ */
+function differenceKind(
+  divergence: TableDivergence,
+  union: readonly string[],
+  tsColumns: readonly string[],
+  rustColumns: readonly string[],
+): DifferenceKind {
+  if (
+    tsColumns.length !== rustColumns.length ||
+    tsColumns.some((column) => !rustColumns.includes(column))
+  ) {
+    return "content";
+  }
+  const keep = union
+    .map((column, index) => (WALL_CLOCK_COLUMNS[column] ? -1 : index))
+    .filter((index) => index >= 0);
+  const readings: string[] = [];
+  for (const [rows, columns] of [
+    [divergence.before, tsColumns],
+    [divergence.after, rustColumns],
+  ] as const) {
+    readings.push(
+      canonicalOrder(
+        unionRows(rows, columns, union).map((row) =>
+          keep.map((index) => row[index]),
+        ),
+      )
+        .map((row) => row.map(encoded).join("\u0000"))
+        .join("\u0001"),
+    );
+  }
+  return readings[0] === readings[1] ? "clock-only" : "content";
+}
+
 /** One diverging table, with the evidence a table name alone cannot carry. */
 function compareRows(
   divergence: TableDivergence,
@@ -448,6 +520,7 @@ function compareRows(
   const rust = canonicalOrder(unionRows(divergence.after, rustColumns, union));
   return {
     table: divergence.table,
+    kind: differenceKind(divergence, union, tsColumns, rustColumns),
     tsRows: divergence.before.length,
     rustRows: divergence.after.length,
     example:
@@ -705,7 +778,18 @@ export function formatSummary(report: ShadowDigestReport): string {
     if (space.status === "matching") continue;
     const details: string[] = [];
     if (space.status === "divergent") {
-      details.push(space.divergences.map(formatDifference).join("; "));
+      const content = space.divergences.filter(
+        (difference) => difference.kind === "content",
+      );
+      const clockOnly = space.divergences.length - content.length;
+      details.push(
+        `${content.length} table${content.length === 1 ? "" : "s"} ` +
+          `${content.length === 1 ? "differs" : "differ"} in content, ` +
+          `${clockOnly} only in created_at/updated_at`,
+      );
+      if (content.length > 0) {
+        details.push(content.map(formatDifference).join("; "));
+      }
     }
     if (space.status === "behind-ts" || space.status === "behind-rust") {
       details.push(

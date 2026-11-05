@@ -9,10 +9,10 @@
 //!   `diff_snapshots` name the tables two readings disagree on
 //!   `digest_of`     one hash over a reading
 //!
-//! The rules are the oracle's, not a reinterpretation of them: columns in
-//! declaration order, clock columns dropped, rows ordered by their own encoding,
-//! a blob as `{"$bytes": "<base64>"}`, and a table contributing its name and
-//! columns even when it has no rows.
+//! The rules are the oracle's, not a reinterpretation of them: columns in name
+//! order, clock columns dropped, rows ordered by their own encoding, a blob as
+//! `{"$bytes": "<base64>"}`, and a table contributing its name and columns even
+//! when it has no rows.
 
 use std::collections::BTreeMap;
 
@@ -80,7 +80,8 @@ pub fn global_tables() -> Vec<String> {
 pub struct TableSnapshot {
     /// The table's name.
     pub table: String,
-    /// The table's columns in declaration order, clock columns dropped.
+    /// The table's columns as the database declares them; each row follows
+    /// this order.
     pub columns: Vec<String>,
     /// Rows in canonical order; each row follows `columns`.
     pub rows: Vec<Vec<Json>>,
@@ -179,9 +180,9 @@ pub fn diff_snapshots(before: &[TableSnapshot], after: &[TableSnapshot]) -> Vec<
     for table in before {
         compared.push(table.table.as_str());
         let other = after_by_table.get(table.table.as_str());
-        let reading = encode_rows(&table.rows);
+        let reading = encode_table(table);
         match other {
-            Some(other) if encode_rows(&other.rows) == reading => continue,
+            Some(other) if encode_table(other) == reading => continue,
             Some(other) => diverging.push(TableDivergence {
                 table: table.table.clone(),
                 before: table.rows.clone(),
@@ -215,8 +216,9 @@ pub fn digest_of(tables: &[TableSnapshot]) -> String {
 
     let mut hash = Sha256::new();
     for table in sorted {
-        hash.update(format!("{}:{}\n", table.table, table_columns(table)).as_bytes());
-        for row in &table.rows {
+        let canonical = canonical_table(table);
+        hash.update(format!("{}:{}\n", table.table, table_columns(&canonical)).as_bytes());
+        for row in &canonical.rows {
             hash.update(format!("{}\n", encode_json(row)).as_bytes());
         }
     }
@@ -260,6 +262,35 @@ pub fn worker_snapshot(tables: &[TableSnapshot]) -> Vec<TableSnapshot> {
     out
 }
 
+/// One table in the form the comparison and the digest hash: columns sorted by
+/// name, rows in canonical order, each row following the sorted columns.
+///
+/// Two readings of one table can declare the same columns in a different
+/// order. A database created before a column existed is healed with
+/// `alter table … add column`, which appends it; a database created from
+/// `schema-space.sql` declares it where the schema line puts it. The values are
+/// the same either way, so the position a column happens to hold must not read
+/// as a difference.
+fn canonical_table(table: &TableSnapshot) -> TableSnapshot {
+    let mut order: Vec<usize> = (0..table.columns.len()).collect();
+    order.sort_by(|a, b| table.columns[*a].cmp(&table.columns[*b]));
+    let columns = order
+        .iter()
+        .map(|index| table.columns[*index].clone())
+        .collect();
+    let mut rows: Vec<Vec<Json>> = table
+        .rows
+        .iter()
+        .map(|row| order.iter().map(|index| row[*index].clone()).collect())
+        .collect();
+    sort_rows(&mut rows);
+    TableSnapshot {
+        table: table.table.clone(),
+        columns,
+        rows,
+    }
+}
+
 fn table_columns(table: &TableSnapshot) -> Json {
     Json::Array(
         table
@@ -270,8 +301,12 @@ fn table_columns(table: &TableSnapshot) -> Json {
     )
 }
 
-fn encode_rows(rows: &[Vec<Json>]) -> Vec<String> {
-    rows.iter().map(|row| encode_json(row)).collect()
+/// A table's canonical encoding: its columns, then one line per row.
+fn encode_table(table: &TableSnapshot) -> String {
+    let canonical = canonical_table(table);
+    let mut lines = vec![table_columns(&canonical).to_string()];
+    lines.extend(canonical.rows.iter().map(|row| encode_json(row)));
+    lines.join("\n")
 }
 
 /// A row's canonical encoding: the values as a JSON array.
