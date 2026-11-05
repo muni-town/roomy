@@ -20,6 +20,7 @@ rusqlite = "0.40"
 indexmap = "2"
 jsonwebtoken = "9"
 async-trait = "0.1"
+roomy-auth.workspace = true
 roomy-readstate.workspace = true
 
 [dev-dependencies]
@@ -28,3 +29,6 @@ http-body-util = "0.1"
 tempfile = "3"
 space-core.workspace = true
 roomy-space-worker.workspace = true
+k256 = { version = "0.13", features = ["ecdsa"] }
+bs58.workspace = true
+parking_lot = "0.12"

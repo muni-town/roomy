@@ -1,4 +1,10 @@
-//! Tickets and the gateway's auth decisions.
+//! Tickets, ATProto session verification, and the gateway's auth decisions.
+//!
+//! [`session`] verifies the token a client obtains from its PDS: the trust
+//! anchor is the issuer's signing key in its DID document, and every failure is
+//! an anonymous caller rather than a rejected request.
+//!
+//! The rest of this crate is connection tickets.
 //!
 //! A connection ticket is what a client presents to open a WebSocket. It has to
 //! be verifiable by **any** gateway, because the client that asks for one and
@@ -25,6 +31,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
+
+pub mod session;
 
 /// What a ticket asserts.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

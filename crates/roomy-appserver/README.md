@@ -37,6 +37,10 @@ directory.
 | `ROOMY_TICKET_TTL` | `60` | A ticket's lifetime in seconds |
 | `ROOMY_TICKET_AUDIENCE` | `roomy-gateway` | The audience a ticket is bound to |
 | `ROOMY_TEST_MODE` | — | `true` accepts `X-Test-Did` instead of a real session |
+| `ROOMY_SERVER_DID` | — | The DID session tokens must name as their audience. Required when the gateway verifies session tokens, which is every deployment that is not in test mode and does not set all three of `ROOMY_GATEWAY_DID`, `ROOMY_WORKER_DID`, `ROOMY_GATEWAY_JWK` |
+| `ROOMY_GATEWAY_DID` | — | A split deployment's gateway DID: the issuer its service tokens must carry |
+| `ROOMY_WORKER_DID` | — | A split deployment's worker DID: the audience those tokens must name |
+| `ROOMY_GATEWAY_JWK` | — | A split deployment's gateway public key (a JWK), the only key that signs those tokens |
 | `ROOMY_MAX_OPEN_SPACES` | `256` | How many per-space databases the registry keeps open |
 | `ROOMY_OWNERSHIP` | `owner` | `follower` replays beside the owner and takes no lease. A follower derives its spaces from the log: it asks the feed every minute and starts an actor for each stream it is not running |
 | `ROOMY_DISCOVERY_INTERVAL` | `60` | How often, in seconds, a follower asks the log which streams it holds |
@@ -52,6 +56,30 @@ directory.
 
 `ROOMY_FEED_URL` and `ROOMY_SIGNAL_URL` are for the worker role; a gateway reads the
 log it owns and fans signals out locally.
+
+### How a caller is authenticated
+
+Three verifiers, chosen by configuration and nothing else:
+
+| Configuration | Verifies |
+| --- | --- |
+| `ROOMY_TEST_MODE=true` | the `X-Test-Did` header, and nothing else. Test harnesses only |
+| all three of `ROOMY_GATEWAY_DID`, `ROOMY_WORKER_DID`, `ROOMY_GATEWAY_JWK` | the service token the gateway in front mints per request (`iss` = the gateway, `aud` = this worker) |
+| otherwise | the ATProto session token a client obtains from its PDS |
+
+Test mode wins over everything, so a harness never reaches the network. A set-but-blank
+variable counts as unset, so a template that renders an empty value falls through to the
+next row of the table.
+
+A session token is verified the way the TypeScript appserver verifies one: an ES256K
+signature over the token against the `#atproto` signing key in the issuer's DID document
+(resolved over the network and cached, then fetched again once if the signature does not
+verify, so a rotated key is honoured), `aud` equal to `ROOMY_SERVER_DID`, `exp` in the
+future, and `lxm` — when present — equal to the NSID being called. The caller is `sub`
+when the token carries one, which is a PDS-issued token for a user, and `iss` otherwise,
+which is an atproto-proxy token signed by the user's own key. **Any failure is an
+anonymous caller, never a 401**: the handlers decide what anonymous may read, and a
+request that carries no `Authorization` header at all is the same anonymous caller.
 
 ### Who decides which spaces a process materialises
 

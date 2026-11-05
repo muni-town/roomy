@@ -1,6 +1,6 @@
 [package]
 name = "roomy-auth"
-description = "Signed connection tickets and the auth decisions the gateway makes"
+description = "Signed connection tickets, ATProto session verification, and the auth decisions the gateway makes"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,4 +10,10 @@ license.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+base64.workspace = true
+bs58.workspace = true
+async-trait = "0.1"
 jsonwebtoken = "9"
+k256 = { version = "0.13", features = ["ecdsa"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
+parking_lot = "0.12"

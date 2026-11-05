@@ -2694,7 +2694,13 @@ dependencies = [
 name = "roomy-auth"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "base64 0.23.1",
+ "bs58",
  "jsonwebtoken",
+ "k256",
+ "parking_lot",
+ "reqwest",
  "serde",
  "serde_json",
  "thiserror",
@@ -3565,9 +3571,13 @@ dependencies = [
  "async-trait",
  "axum",
  "base64 0.23.1",
+ "bs58",
  "http-body-util",
  "indexmap",
  "jsonwebtoken",
+ "k256",
+ "parking_lot",
+ "roomy-auth",
  "roomy-readstate",
  "roomy-space-worker",
  "rusqlite",

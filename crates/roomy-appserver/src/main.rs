@@ -30,6 +30,15 @@
 //! ROOMY_TICKET_TTL     60              a ticket's lifetime, in seconds
 //! ROOMY_TICKET_AUDIENCE roomy-gateway  the audience a ticket is bound to
 //! ROOMY_TEST_MODE      —               `true` enables `X-Test-Did`
+//! ROOMY_SERVER_DID     —               the DID session tokens must name as
+//!                                     their audience; required unless test mode
+//!                                     or the split deployment's variables are set
+//! ROOMY_GATEWAY_DID    —               with ROOMY_WORKER_DID and
+//! ROOMY_GATEWAY_JWK, a split deployment verifying the gateway's service tokens
+//! ROOMY_WORKER_DID     —               the DID the gateway's tokens are addressed
+//!                                     to, in that split deployment
+//! ROOMY_GATEWAY_JWK    —               the gateway's public key, in that split
+//!                                     deployment
 //! ROOMY_INTERNAL_SECRET —              the shared secret for `/internal/feed`; a
 //!                                     gateway that sets it serves its log to
 //!                                     workers on other machines
@@ -76,7 +85,7 @@ use space_feed::sqlite::SqliteChangeFeed;
 use space_feed::ChangeFeed;
 use space_xrpc::registry::{SpaceRegistry, SpaceResolver};
 use space_xrpc::state::{SpaceReadDb, XrpcState};
-use space_xrpc::verify::{GatewayServiceAuth, TestMode};
+use space_xrpc::verify::{CallerVerifier, GatewayServiceAuth, SessionAuth, TestMode};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
@@ -440,6 +449,58 @@ fn supervisor_config(config: &Config) -> SupervisorConfig {
     }
 }
 
+/// The verifier this gateway authenticates callers with.
+///
+/// Test mode comes first, so a harness never reaches the network. Otherwise a
+/// deployment that names all three split-mode variables verifies the service
+/// tokens its own gateway mints; one that does not verifies the session tokens
+/// clients obtain from their PDS, which is what a real client sends.
+fn callers_verifier(
+    test_mode: bool,
+) -> Result<Arc<dyn CallerVerifier>, Box<dyn std::error::Error>> {
+    if test_mode {
+        return Ok(Arc::new(TestMode));
+    }
+    if let Some(verifier) = gateway_service_auth()? {
+        return Ok(verifier);
+    }
+    let server_did = env_var("ROOMY_SERVER_DID")
+        .ok_or("ROOMY_SERVER_DID is not set: a session token's audience must name this server")?;
+    Ok(Arc::new(SessionAuth::new(server_did)))
+}
+
+/// The split deployment's verifier, when all three of its variables are set.
+///
+/// The gateway mints a service token per request addressed to the worker, so
+/// the worker's own DID is the audience and the gateway's JWK is the only key
+/// that signs one.
+fn gateway_service_auth() -> Result<Option<Arc<dyn CallerVerifier>>, Box<dyn std::error::Error>> {
+    let Some(gateway_did) = env_var("ROOMY_GATEWAY_DID") else {
+        return Ok(None);
+    };
+    let Some(worker_did) = env_var("ROOMY_WORKER_DID") else {
+        return Ok(None);
+    };
+    let Some(jwk) = env_var("ROOMY_GATEWAY_JWK") else {
+        return Ok(None);
+    };
+    let jwk = serde_json::from_str(&jwk)?;
+    Ok(Some(Arc::new(GatewayServiceAuth::new(
+        gateway_did,
+        worker_did,
+        &jwk,
+    )?)))
+}
+
+/// An environment variable's value, trimmed; one that is set but blank is
+/// unset, so a template that renders an empty value falls through.
+fn env_var(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
 fn gateway_state(
     config: &Config,
     signals: GatewaySignals,
@@ -468,14 +529,7 @@ fn gateway_state(
             }
         };
 
-    let verifier: Arc<dyn space_xrpc::verify::CallerVerifier> = if config.test_mode {
-        Arc::new(TestMode)
-    } else {
-        let gateway_did = std::env::var("ROOMY_GATEWAY_DID")?;
-        let worker_did = std::env::var("ROOMY_WORKER_DID")?;
-        let jwk = serde_json::from_str(&std::env::var("ROOMY_GATEWAY_JWK")?)?;
-        Arc::new(GatewayServiceAuth::new(gateway_did, worker_did, &jwk)?)
-    };
+    let verifier = callers_verifier(config.test_mode)?;
 
     let reads = XrpcState::new(placeholder, verifier)
         .with_spaces(Arc::clone(&registry) as Arc<dyn SpaceResolver>);
