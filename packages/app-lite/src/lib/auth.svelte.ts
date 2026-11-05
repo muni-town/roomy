@@ -34,6 +34,12 @@ import { scheduleAutoReload } from "./error-recovery";
 import { pxUnauth } from "./client";
 import { clearPersistedCache } from "./client";
 import { openNativeSessionStore } from "./cache-store";
+import {
+  createSessionAwareFetch,
+  resetSessionStreak,
+  sessionFailureError,
+} from "./session-health";
+import { trackMeasurement } from "./telemetry/faro";
 import { setAppserverOrigin } from "./appserver-origin";
 import { subscribeIfAlreadyPermitted, clearPushSubscription } from "./push.svelte";
 import { saveLastLogin } from "./last-login.svelte";
@@ -235,6 +241,25 @@ const sessionDiagnostic: Diagnostic = (message, detail) => {
 };
 
 /**
+ * The `fetch` the OAuth client must use for the requests that carry the
+ * session. Wrapping it is what lets a session the server keeps rejecting reach
+ * the recovery path: the rejection is otherwise returned to a caller that logs
+ * it and moves on, and the tab retries forever without ever asking for a reload
+ * or a login (see `session-health.ts`). `undefined` when no HappyView endpoint
+ * is configured — the legacy direct-PDS client has no session origin to count.
+ */
+function sessionFetch(): typeof globalThis.fetch | undefined {
+  const origin = CONFIG.happyviewEndpoint;
+  if (!origin) return undefined;
+  return createSessionAwareFetch({
+    origin,
+    onExhausted: (failure) => scheduleAutoReload(sessionFailureError(failure)),
+    onStreak: (streak) =>
+      trackMeasurement("session.consecutive_failures", streak, { origin }),
+  });
+}
+
+/**
  * The options every OAuth entry point shares: the client identity, the stable
  * dev-loopback client id (`CLIENT_ID_SCOPE` — the PDS records the client id
  * with the authorization request, so the callback and every later refresh must
@@ -242,6 +267,7 @@ const sessionDiagnostic: Diagnostic = (message, detail) => {
  * the consent screen), and the shell's store for the session's own copy.
  */
 async function sessionOptions(scope: string): Promise<InitSessionOptions> {
+  const sessionRequest = sessionFetch();
   return {
     happyviewEndpoint: CONFIG.happyviewEndpoint,
     clientKey: CONFIG.happyviewClientKey,
@@ -252,6 +278,7 @@ async function sessionOptions(scope: string): Promise<InitSessionOptions> {
     clientIdScope: CLIENT_ID_SCOPE,
     nativeSessionStore: await openNativeSessionStore(),
     onDiagnostic: sessionDiagnostic,
+    ...(sessionRequest ? { fetch: sessionRequest } : {}),
   };
 }
 
@@ -689,6 +716,9 @@ export async function updateProfile() {
  * that fails cannot leave the app rendering the previous account.
  */
 export async function logout() {
+  // The run of rejected session requests belonged to the session being ended;
+  // the next sign-in must not inherit it (see `session-health.ts`).
+  if (CONFIG.happyviewEndpoint) resetSessionStreak(CONFIG.happyviewEndpoint);
   // Every step below is best-effort: a session that is already dead — the case
   // that reaches here from the error-recovery hand-off — is exactly one whose
   // sign-out can reject (the HappyView client, for one, revokes over the same

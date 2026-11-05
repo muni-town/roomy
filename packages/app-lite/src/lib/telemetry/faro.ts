@@ -173,3 +173,22 @@ export function trackEvent(name: string, attributes: EventAttributes): void {
     pendingEvents.push({ name, attributes });
   }
 }
+
+/**
+ * Record a numeric measurement — a sample of a value that moves, such as the
+ * length of the current run of failed session requests. Unlike `trackEvent`
+ * this is not buffered before the SDK loads: a measurement describes a moment,
+ * and flushing a stale one later would misplace it in time. A no-op until the
+ * SDK is ready, which is also when the first request can happen.
+ */
+export function trackMeasurement(
+  type: string,
+  value: number,
+  context?: Record<string, string>,
+): void {
+  faroInstance?.api.pushMeasurement({
+    type,
+    values: { value },
+    ...(context ? { context } : {}),
+  });
+}
