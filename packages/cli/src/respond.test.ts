@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Readable } from "node:stream";
-import { respond, resolveTraceTarget, resolveParent } from "./respond.js";
+import { respond, resolveTraceTarget, resolveParent, sessionKeys, SessionStore } from "./respond.js";
 import { QueueStore } from "./queue.js";
 import type { CronJobPayload } from "./queue.js";
 
@@ -310,5 +310,72 @@ describe("resolveParent: a bad reply target never becomes the next parent", () =
     } as never;
 
     expect(await resolveParent(xrpc, message("01B"), "01B", new Map())).toBe("01B");
+  });
+});
+
+describe("session continuity: a reply resumes the session that produced its target", () => {
+  const SPACE = "space:test";
+
+  test("sessionKeys prefixes, dedupes, and keeps nearest-first order", () => {
+    expect(sessionKeys(SPACE, ["01A", undefined, "01B", "01A"])).toEqual([
+      "space:test:01A",
+      "space:test:01B",
+    ]);
+  });
+
+  test("a reply to the answer finds the session through that message id", () => {
+    const sessions = new SessionStore();
+    // The turn prompted by 01TRIGGER posted answer 01ANSWER.
+    sessions.link(sessionKeys(SPACE, ["01TRIGGER", "01ANSWER"]), {
+      sessionId: "session-1",
+      traceThreadId: "01TRACE",
+    });
+
+    const found = sessions.find(sessionKeys(SPACE, ["01ANSWER", "01TRIGGER"]));
+    expect(found?.sessionId).toBe("session-1");
+    expect(found?.traceThreadId).toBe("01TRACE");
+  });
+
+  test(
+    "a slid chain boundary does not orphan the session",
+    () => {
+      // The failure this guards: walkChain can only see a bounded window, so a
+      // chain longer than the window resolves a different "root" each time the
+      // window's floor advances. Keying on that root made every reply start a
+      // fresh session. Resolution is by message id, so a boundary that moved
+      // between the prompt and the reply is irrelevant.
+      const sessions = new SessionStore();
+      sessions.link(sessionKeys(SPACE, ["01TRIGGER", "01ANSWER"]), {
+        sessionId: "session-1",
+      });
+
+      // Later walk of the same chain: the window now reaches 01MID only, so the
+      // walked ids and the boundary root are different from the first walk's.
+      const walkedIds = ["01REPLY", "01MID"];
+      const driftedRoot = "01OLDER";
+      const found = sessions.find(sessionKeys(SPACE, ["01ANSWER", ...walkedIds]));
+
+      expect(found?.sessionId).toBe("session-1");
+      expect(sessions.find(sessionKeys(SPACE, [driftedRoot]))).toBeUndefined();
+    },
+  );
+
+  test("a link survives a responder restart", () => {
+    const file = path.join(tmpdir(), "omp-sessions.json");
+    new SessionStore(file).link(sessionKeys(SPACE, ["01TRIGGER", "01ANSWER"]), {
+      sessionId: "session-1",
+      traceThreadId: "01TRACE",
+    });
+
+    const reloaded = new SessionStore(file);
+    expect(reloaded.find(sessionKeys(SPACE, ["01ANSWER"]))?.sessionId).toBe("session-1");
+    expect(reloaded.find(sessionKeys(SPACE, ["01ANSWER"]))?.traceThreadId).toBe("01TRACE");
+  });
+
+  test("an unknown message resolves to no session", () => {
+    const sessions = new SessionStore();
+    sessions.link(sessionKeys(SPACE, ["01TRIGGER"]), { sessionId: "session-1" });
+
+    expect(sessions.find(sessionKeys(SPACE, ["01ELSEWHERE"]))).toBeUndefined();
   });
 });
