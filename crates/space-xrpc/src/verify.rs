@@ -1,11 +1,13 @@
 //! Caller verification.
 //!
-//! Two implementations, selected by configuration and nothing else:
+//! Three implementations, selected by configuration and nothing else:
 //!
 //! - [`TestMode`] reads `X-Test-Did`, mirroring the appserver's test verifier.
 //! - [`GatewayServiceAuth`] verifies a service JWT minted by the gateway.
+//! - [`SessionAuth`] verifies the ATProto session token a client obtained from
+//!   its PDS, which is what a real client sends.
 //!
-//! With neither configured the router cannot be built — there is no implicit
+//! With none configured the router cannot be built — there is no implicit
 //! trust mode. Missing credentials are anonymous, exactly as in the appserver;
 //! the handlers' access checks decide what that may read.
 
@@ -147,6 +149,61 @@ impl CallerVerifier for GatewayServiceAuth {
         Ok(Caller {
             did: Some(CallerDid::try_from(sub)?),
         })
+    }
+}
+
+/// ATProto session auth: the token a client gets from its PDS via
+/// `com.atproto.server.getServiceAuth`, which is what a real client sends.
+///
+/// Verification itself — the ES256K signature against the issuer's DID
+/// document, `aud`, `exp` and `lxm` — lives in [`roomy_auth::session`]. What
+/// this adds is the HTTP shape: a bearer token is read from the header, and
+/// everything that does not verify is an anonymous caller rather than an error,
+/// because the handlers make the access decision.
+pub struct SessionAuth {
+    session: roomy_auth::session::SessionVerifier,
+}
+
+impl SessionAuth {
+    /// A verifier for tokens whose `aud` is `server_did`, resolving issuers over
+    /// the network.
+    #[must_use]
+    pub fn new(server_did: impl Into<String>) -> Self {
+        Self {
+            session: roomy_auth::session::SessionVerifier::new(server_did),
+        }
+    }
+
+    /// A verifier that resolves issuer keys through `keys`.
+    #[must_use]
+    pub fn with_keys(
+        server_did: impl Into<String>,
+        keys: Arc<dyn roomy_auth::session::SigningKeys>,
+    ) -> Self {
+        Self {
+            session: roomy_auth::session::SessionVerifier::with_keys(server_did, keys),
+        }
+    }
+}
+
+#[async_trait]
+impl CallerVerifier for SessionAuth {
+    async fn verify(&self, headers: &HeaderMap, nsid: &Nsid) -> Result<Caller, XrpcError> {
+        let token = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|authorization| authorization.to_str().ok())
+            .and_then(|raw| raw.strip_prefix("Bearer "));
+        let Some(token) = token else {
+            return Ok(Caller { did: None });
+        };
+        // A caller's DID that does not parse is a token this service has no
+        // use for: the handlers only know how to act for a real DID.
+        let did = self
+            .session
+            .caller(token, nsid.as_str())
+            .await
+            .and_then(|did| CallerDid::try_from(did.as_str()).ok());
+        Ok(Caller { did })
     }
 }
 
