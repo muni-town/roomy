@@ -116,8 +116,15 @@ export interface RespondOptions extends Omit<OmpOptions, "resume"> {
 }
 
 interface ChainWalk {
-  /** Conversation root id the session is keyed on (see walkChain). */
+  /** True root of the reply chain, as far as the fetched window reaches: the
+   *  oldest chain message when the window contains it, otherwise its parent
+   *  (a boundary target outside the window). This is a CONTEXT boundary, not a
+   *  stable identity — see {@link sessionKeys}. */
   rootId: string;
+  /** Ids of the chain messages inside the fetched window, trigger first. The
+   *  chain the prompt sees, and the candidates a stored session is looked up
+   *  by (nearest message first). */
+  ids: string[];
   /** Message the reply is attached to: the triggering message's own reply
    *  target when that target is a message, else the triggering message
    *  itself. A reply attachment never creates a thread room. */
@@ -129,7 +136,7 @@ interface ChainWalk {
   roomName?: string;
 }
 
-interface StoredSession {
+export interface StoredSession {
   sessionId: string;
   /** Id of the 💭 trace-thread room for channel-initiated sessions
    *  (undefined for thread-initiated sessions — traces stay in-room). */
@@ -355,14 +362,19 @@ async function runMentionJob(
 
   const recent = opts.recent ?? 100;
   const chain = await walkChain(xrpc, roomId, agentDid, msg.id, recent);
-  const chainKey = `${spaceId}:${chain.rootId}`;
   const prompt = buildPrompt(message, roomId, agentDid, opts.prefix, chain.context, chain.roomName);
   const parent = chain.parent;
   const isContinuation = kind === "reply";
-  const prior = isContinuation ? sessions?.get(chainKey) : undefined;
+  // A reply continues the session that produced the message it answers. Look
+  // that up by message id — the reply's target first, then the walked chain
+  // nearest-first — never by the chain root, whose identity drifts with the
+  // fetch window (see walkChain / sessionKeys).
+  const prior = isContinuation
+    ? sessions?.find(sessionKeys(spaceId, [msg.replyTo, ...chain.ids]))
+    : undefined;
   const resume = prior?.sessionId;
-  if (resume) log(`continuing omp session ${resume} (chain ${chain.rootId})`);
-  else if (isContinuation) log(`reply with no stored session — starting fresh (chain ${chain.rootId})`);
+  if (resume) log(`continuing omp session ${resume} (reply to ${msg.replyTo ?? chain.rootId})`);
+  else if (isContinuation) log(`reply with no stored session — starting fresh (chain root ${chain.rootId})`);
   log(`${kind} from ${msg.authorName || msg.authorDid}: ${truncate(plaintextOf(message), 80)}`);
 
   // Trace placement: a session in a CHANNEL gets a dedicated 💭 thread room and
@@ -435,14 +447,20 @@ async function runMentionJob(
     }
     throw error;
   }
+  // Reachable from both ends of the turn: the message that prompted it and the
+  // answer it produced. A later reply to either resolves this session directly,
+  // regardless of where the chain walk happens to stop.
+  //
   // Self-triggered ticks are independent (each is a fresh root id), so
   // persisting an entry per tick would only grow the session file forever.
-  if (reply.sessionId && !selfTriggered) {
-    sessions?.set(chainKey, {
+  const answerIds: string[] = [];
+  const rememberSession = () => {
+    if (!reply.sessionId || selfTriggered || !sessions) return;
+    sessions.link(sessionKeys(spaceId, [msg.id, ...answerIds]), {
       sessionId: reply.sessionId,
       traceThreadId: trace.kind === "thread" ? trace.id : undefined,
     });
-  }
+  };
   // A `tile:` directive in the answer is an attachment, not body text. Read the
   // directives out once, here, so no posting path below both attaches the tile
   // and repeats its address. A directive that cannot be parsed is left in the
@@ -459,6 +477,7 @@ async function runMentionJob(
   // that produced no text. An answer that is only a tile directive still has
   // something to post.
   if (!answerText.trim() && tiles.length === 0) {
+    rememberSession();
     log("empty reply — not posting");
     return;
   }
@@ -477,6 +496,8 @@ async function runMentionJob(
     trace.kind === "thread" ? `\n\n---\n💭 trace: ${ROOMY_APP_URL}/${spaceId}/${trace.id}` : "";
   if (streamThinking && streamedThinking) {
     const { messageId } = await sendMessage(xrpc, spaceId, roomId, `${answerText}${traceLink}`, { parent, tiles });
+    answerIds.push(messageId);
+    rememberSession();
     log(`replied ${messageId} (answer; thinking ${trace.kind === "thread" ? `in trace thread ${trace.id}` : "streamed in room"})`);
     return;
   }
@@ -487,6 +508,8 @@ async function runMentionJob(
     // there and the clean answer (with a link) in the channel.
     await sendReply(xrpc, spaceId, trace.id, thinking, buildThinkingBlocks(thinking));
     const { messageId } = await sendMessage(xrpc, spaceId, roomId, `${answerText}${traceLink}`, { parent, tiles });
+    answerIds.push(messageId);
+    rememberSession();
     log(`replied ${messageId} (answer; thinking in trace thread ${trace.id})`);
     return;
   }
@@ -496,6 +519,8 @@ async function runMentionJob(
     parent,
     tiles,
   });
+  answerIds.push(messageId);
+  rememberSession();
   log(`replied ${messageId}${postThinking ? " (with thinking)" : ""}`);
 }
 
@@ -524,21 +549,22 @@ async function runCronJob(xrpc: DirectXrpcClient, job: QueueJob, log: (m: string
 
 /**
  * Fetch a recent-message window in a room, walk the triggering message's reply
- * chain to its root, and build (a) the conversation root id the omp session is
- * keyed on, (b) the message to attach the reply to, and (c) a context string
- * limited to the chain's own messages (oldest first) — plus the room name, so
- * the prompt explicitly states where the agent was prompted in.
+ * chain, and build (a) the chain's messages, (b) the message to attach the
+ * reply to, and (c) a context string limited to the chain's own messages
+ * (oldest first) — plus the room name, so the prompt explicitly states where
+ * the agent was prompted in.
  *
  * Parent resolution: the triggering message's own reply target when it names a
  * message (so the reply lands beside its siblings), else the triggering message
  * itself. See {@link resolveParent} for why a target that is not a message is
  * not re-propagated.
  *
- * Root resolution: walk `replyTo` upward through the fetched window. The root
- * is the first message with no replyTo inside the window, OR the first replyTo
- * target that falls outside the window (a stable boundary id — every message in
- * the same chain walks to the same boundary). This keeps session keys
- * deterministic with a single bounded fetch.
+ * Walk termination: the walk stops at the first message with no replyTo, or at
+ * the first replyTo target outside the fetched window. The latter is a property
+ * of the window, not of the chain: as the room grows the window's floor slides
+ * forward, and the same chain resolves a different boundary at a different
+ * time. `rootId` is therefore only a context boundary; session identity is
+ * resolved from message ids ({@link sessionKeys}), never from it alone.
  */
 async function walkChain(
   xrpc: DirectXrpcClient,
@@ -548,7 +574,7 @@ async function walkChain(
   limit: number,
 ): Promise<ChainWalk> {
   if (limit <= 0) {
-    return { rootId: msgId, parent: msgId, context: "" };
+    return { rootId: msgId, ids: [msgId], parent: msgId, context: "" };
   }
   try {
     // `limit` is user-controlled (`--recent`) and the server caps a single
@@ -572,7 +598,7 @@ async function walkChain(
       }
       const next = byId.get(nextId);
       if (!next) {
-        rootId = nextId; // stable boundary: target outside the window
+        rootId = nextId; // boundary: the parent is outside the window
         break;
       }
       cur = next;
@@ -597,12 +623,13 @@ async function walkChain(
 
     return {
       rootId,
+      ids: chain.map((m) => m.id),
       parent: await resolveParent(xrpc, chain[0], msgId, byId),
       context,
       roomName: typeof meta?.name === "string" ? meta.name : undefined,
     };
   } catch {
-    return { rootId: msgId, parent: msgId, context: "" };
+    return { rootId: msgId, ids: [msgId], parent: msgId, context: "" };
   }
 }
 
@@ -686,11 +713,36 @@ export async function resolveTraceTarget(
 }
 
 /**
- * Persist a per-conversation-chain omp session id so repeated replies in the
- * same chain resume the same omp session (conversation continuity) across
- * events and across responder restarts. Keyed by `${spaceId}:${chainRootId}`.
+ * Keys a stored session is reachable through, nearest message first.
+ *
+ * A session is keyed by every message id that belongs to its turn — the
+ * message that prompted it and the answers it posted — because those ids are
+ * fixed by the appserver and never change. The reply chain's root is not such
+ * an id: `walkChain` can only see a bounded window, so once a chain is longer
+ * than the window the walk stops at whatever the window's oldest chain message
+ * happens to be, and that moves as the room grows. Keying on it made a
+ * continuation lookup miss exactly once a conversation outgrew the window —
+ * every reply then started a fresh session and stored it under a new drifting
+ * key, so no later reply could ever find it.
  */
-class SessionStore {
+export function sessionKeys(spaceId: string, ids: readonly (string | undefined)[]): string[] {
+  const keys: string[] = [];
+  const seen = new Set<string>();
+  for (const id of ids) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    keys.push(`${spaceId}:${id}`);
+  }
+  return keys;
+}
+
+/**
+ * Persist omp session ids so repeated replies in the same conversation resume
+ * the same omp session (conversation continuity) across events and across
+ * responder restarts. One entry per message id the session is reachable from
+ * (see {@link sessionKeys}); every entry points at the same session.
+ */
+export class SessionStore {
   #data = new Map<string, StoredSession>();
   #file?: string;
 
@@ -702,8 +754,8 @@ class SessionStore {
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       for (const [k, v] of Object.entries(parsed)) {
         if (typeof v === "string") {
-          // Pre-chain-keying entries: room-keyed plain session ids. They no
-          // longer match any chain key, so they are dropped (fresh sessions).
+          // Bare session ids from before per-message keying: no longer
+          // addressable, so they are dropped (fresh sessions).
           continue;
         }
         const s = v as StoredSession;
@@ -716,12 +768,19 @@ class SessionStore {
     }
   }
 
-  get(chainKey: string): StoredSession | undefined {
-    return this.#data.get(chainKey);
+  /** The first stored session among `keys`, which must be nearest-first. */
+  find(keys: readonly string[]): StoredSession | undefined {
+    for (const key of keys) {
+      const found = this.#data.get(key);
+      if (found) return found;
+    }
+    return undefined;
   }
 
-  set(chainKey: string, session: StoredSession): void {
-    this.#data.set(chainKey, session);
+  /** Make `session` reachable under every key, persisting once. */
+  link(keys: readonly string[], session: StoredSession): void {
+    if (keys.length === 0) return;
+    for (const key of keys) this.#data.set(key, session);
     if (!this.#file) return;
     try {
       fs.mkdirSync(path.dirname(this.#file), { recursive: true });
