@@ -34,8 +34,12 @@ import {
 } from "../../src/materialization/records/corpus.ts";
 import type { LoggedEvent } from "../../src/materialization/types.ts";
 import { writeRecordChanges } from "../../src/streams/recordChanges.ts";
+import { READ_PATH_CACHES } from "../../src/streams/rebuildEquality.ts";
 import {
+  IGNORED_TABLES,
+  VALUE_LIMIT,
   formatSummary,
+  isIgnoredTable,
   openReadOnlyDb,
   parseShadowDigestArgs,
   runShadowDigest,
@@ -184,9 +188,10 @@ describe("a space both projections agree on", () => {
     const [space] = report.spaces;
     expect(space!.space).toBe(STREAM);
     expect(space!.status).toBe("matching");
-    expect(space!.tables).toEqual([]);
+    expect(space!.divergences).toEqual([]);
     expect(space!.tsCursor).toBe(tip);
     expect(space!.rustCursor).toBe(tip);
+    expect(space!.rustDbPresent).toBe(true);
     expect(space!.tip).toBe(tip);
     expect(space!.tsDigest).toBe(space!.rustDigest!);
     expect(report.totals).toEqual({
@@ -217,11 +222,182 @@ describe("a space the two projections disagree on", () => {
     const { report, exitCode } = await run();
 
     expect(report.spaces[0]!.status).toBe("divergent");
-    expect(report.spaces[0]!.tables).toContain("comp_room");
+    const [difference] = report.spaces[0]!.divergences;
+    expect(difference!.table).toBe("comp_room");
+    expect(difference!.tsRows).toBe(difference!.rustRows);
+    expect(Object.keys(difference!.example!.key)).toEqual(["entity"]);
+    expect(difference!.example!.columns.map((c) => c.column)).toContain("label");
     expect(report.totals.divergent).toBe(1);
     expect(report.totals.compared).toBe(1);
     expect(exitCode).toBe(1);
     expect(formatSummary(report)).toContain("comp_room");
+  }, 30_000);
+});
+
+describe("tables only one core maintains", () => {
+  test("an FTS index on one side only is not a divergence", async () => {
+    const tip = await writeEvents(eventsPath);
+    await buildSpace(spacePath(tsDir));
+    await buildSpace(spacePath(rustDir));
+    setWorkerCursor(spacePath(rustDir), tip);
+
+    // Search stays in TypeScript: the TS DB indexes messages, the Rust DB
+    // declares the FTS table and leaves it empty.
+    const ts = new Database(spacePath(tsDir));
+    ts.exec("create virtual table message_fts using fts5(entity, room, content)");
+    ts.run("insert into message_fts (entity, room, content) values (?, ?, ?)", [
+      "01JMSG00000000000000000001",
+      "01JROOM0000000000000000001",
+      "hello world",
+    ]);
+    ts.close();
+
+    const { report, exitCode } = await run();
+
+    expect(report.spaces[0]!.status).toBe("matching");
+    expect(report.spaces[0]!.divergences).toEqual([]);
+    expect(report.spaces[0]!.tsDigest).toBe(report.spaces[0]!.rustDigest!);
+    expect(exitCode).toBe(0);
+  }, 30_000);
+
+  test("read-path cache rows on one side only are not a divergence", async () => {
+    const tip = await writeEvents(eventsPath);
+    await buildSpace(spacePath(tsDir));
+    await buildSpace(spacePath(rustDir));
+    setWorkerCursor(spacePath(rustDir), tip);
+
+    const ts = new Database(spacePath(tsDir));
+    ts.run(
+      "insert into room_access (room_id, space_id, parent_channel_id) values (?, ?, ?)",
+      ["01JROOM0000000000000000001", STREAM, null],
+    );
+    ts.run(
+      "insert into room_activity (room_id, latest_message_id, latest_at) values (?, ?, ?)",
+      ["01JROOM0000000000000000001", "01JMSG00000000000000000001", 1],
+    );
+    ts.close();
+
+    const { report, exitCode } = await run();
+
+    expect(report.spaces[0]!.status).toBe("matching");
+    expect(exitCode).toBe(0);
+  }, 30_000);
+
+  test("every documented read-path cache is in the ignore list", () => {
+    for (const table of Object.keys(READ_PATH_CACHES)) {
+      expect(isIgnoredTable(table)).toBe(true);
+    }
+    expect(isIgnoredTable("message_fts")).toBe(true);
+    expect(isIgnoredTable("message_fts_data")).toBe(true);
+    expect(isIgnoredTable("comp_embed_link")).toBe(false);
+    expect(isIgnoredTable("comp_info")).toBe(false);
+    for (const entry of IGNORED_TABLES) {
+      expect(entry.reason.trim().length).toBeGreaterThan(20);
+    }
+  });
+});
+
+describe("row-level evidence", () => {
+  test("an extra row is reported with both counts and its key", async () => {
+    const tip = await writeEvents(eventsPath);
+    await buildSpace(spacePath(tsDir));
+    await buildSpace(spacePath(rustDir));
+    setWorkerCursor(spacePath(rustDir), tip);
+
+    const extra = "01JEXTRAROW000000000000001";
+    const rust = new Database(spacePath(rustDir));
+    rust.run(
+      "insert into entities (id, stream_id, created_at, updated_at) values (?, ?, ?, ?)",
+      [extra, STREAM, SEEDED_AT, SEEDED_AT],
+    );
+    const total = await toAsyncDb(rust)
+      .query("select count(*) as n from entities")
+      .get<{ n: number }>();
+    const rustEntities = total?.n ?? 0;
+    rust.close();
+
+    const { report, exitCode } = await run();
+
+    expect(report.spaces[0]!.status).toBe("divergent");
+    expect(report.spaces[0]!.divergences).toHaveLength(1);
+    const [difference] = report.spaces[0]!.divergences;
+    expect(difference!.table).toBe("entities");
+    expect(difference!.tsRows).toBe(rustEntities - 1);
+    expect(difference!.rustRows).toBe(rustEntities);
+    expect(difference!.example!.key).toEqual({ id: extra });
+    expect(exitCode).toBe(1);
+  }, 30_000);
+
+  test("quotes at most VALUE_LIMIT characters and never blob bytes", async () => {
+    const tip = await writeEvents(eventsPath);
+    await buildSpace(spacePath(tsDir));
+    await buildSpace(spacePath(rustDir));
+    setWorkerCursor(spacePath(rustDir), tip);
+
+    const entity = "01JTRUNCATEDROW0000000000";
+    const longText = `text/${"x".repeat(200)}`;
+    const insert = `insert into comp_content
+        (entity, mime_type, data, last_edit, timestamp)
+      values (?, ?, ?, ?, ?)`;
+    const ts = new Database(spacePath(tsDir));
+    ts.run(insert, [
+      entity,
+      longText,
+      new Uint8Array([0, 1, 2, 3]),
+      "01JEDIT0000000000000000001",
+      1,
+    ]);
+    ts.close();
+    const rust = new Database(spacePath(rustDir));
+    rust.run(insert, [
+      entity,
+      `${longText}y`,
+      new Uint8Array(4096),
+      "01JEDIT0000000000000000001",
+      1,
+    ]);
+    rust.close();
+
+    const { report } = await run();
+
+    const difference = report.spaces[0]!.divergences.find(
+      (d) => d.table === "comp_content",
+    )!;
+    const columns = difference.example!.columns;
+    expect(columns.map((c) => c.column)).toEqual(["mime_type", "data"]);
+
+    const mime = columns.find((c) => c.column === "mime_type")!;
+    expect(mime.ts.length).toBeLessThanOrEqual(VALUE_LIMIT);
+    expect(mime.ts.endsWith("…")).toBe(true);
+    const data = columns.find((c) => c.column === "data")!;
+    expect(data.ts).toBe("blob(4 B)");
+    expect(data.rust).toBe("blob(4096 B)");
+
+    const serialized = JSON.stringify(report);
+    expect(serialized).not.toContain(longText);
+    expect(serialized).not.toContain(
+      Buffer.from([0, 1, 2, 3]).toString("base64"),
+    );
+  }, 30_000);
+});
+
+describe("why a space was not compared", () => {
+  test("behind-rust separates no feed rows from no shadow DB", async () => {
+    await writeEvents(eventsPath);
+    await buildSpace(spacePath(tsDir));
+    await buildSpace(spacePath(rustDir)); // No worker cursor row.
+
+    const noCursor = await run();
+    expect(noCursor.report.spaces[0]!.status).toBe("behind-rust");
+    expect(noCursor.report.spaces[0]!.rustCursor).toBeNull();
+    expect(noCursor.report.spaces[0]!.rustDbPresent).toBe(true);
+    expect(formatSummary(noCursor.report)).toContain("rust-db=present");
+
+    rmSync(spacePath(rustDir));
+    const noDb = await run();
+    expect(noDb.report.spaces[0]!.status).toBe("missing-rust");
+    expect(noDb.report.spaces[0]!.rustDbPresent).toBe(false);
+    expect(formatSummary(noDb.report)).toContain("rust-db=absent");
   }, 30_000);
 });
 
@@ -233,10 +409,10 @@ describe("eligibility", () => {
     setWorkerCursor(spacePath(rustDir), tip - 1);
 
     const { report, exitCode } = await run();
-
     expect(report.spaces[0]!.status).toBe("behind-rust");
     expect(report.spaces[0]!.rustCursor).toBe(tip - 1);
-    expect(report.spaces[0]!.tables).toEqual([]);
+    expect(report.spaces[0]!.rustDbPresent).toBe(true);
+    expect(report.spaces[0]!.divergences).toEqual([]);
     expect(report.spaces[0]!.tsDigest).toBeNull();
     expect(report.totals).toEqual({
       spaces: 1,
@@ -282,6 +458,7 @@ describe("eligibility", () => {
     const { report, exitCode } = await run();
 
     expect(report.spaces.map((s) => s.status)).toEqual(["missing-rust"]);
+    expect(report.spaces[0]!.rustDbPresent).toBe(false);
     expect(report.totals.missing).toBe(1);
     expect(exitCode).toBe(2);
 
