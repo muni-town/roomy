@@ -31,6 +31,23 @@
  * the `.sqlite.new` replay runs, so it is `schema-stale` and skipped, never
  * reported as divergent.
  *
+ * **What is compared.** Every derived table in the per-space schema, minus the
+ * entries in {@link IGNORED_TABLES}: tables the two cores maintain differently
+ * by construction, each with its reason stated in that constant. `comp_embed_*`
+ * and `comp_info` are deliberately *not* ignored — the enrichment sweeper
+ * writes them outside the log, but that is a hypothesis about a divergence, not
+ * grounds for hiding it, so they are compared and reported like any other table.
+ *
+ * **Evidence.** A divergent table carries the row count on each side and the
+ * first row the two sides disagree on: its primary key, the columns that
+ * differ, both values truncated to 80 characters, a blob reported as its size.
+ * A table name alone has already been read as a finding when it was noise.
+ *
+ * **Why a space was not compared.** Every report says whether the shadow DB
+ * file exists, so "the worker applied no feed rows" (`rustCursor: null`,
+ * `rustDbPresent: true`) reads differently from "the shadow never created the
+ * DB" (`rustDbPresent: false`) without a second query.
+ *
  * **Read-only.** Every file is opened with `{ readonly: true }`, so SQLite
  * refuses any write on the handle. Neither DB nor the events DB is ever written:
  * no cursor, no planner stats, no snapshot table. A readonly handle on a live
@@ -55,6 +72,8 @@ import {
   digestOf,
   snapshotSpaceDb,
   workerSnapshot,
+  type TableDivergence,
+  type TableSnapshot,
 } from "../src/streams/rebuildEquality.ts";
 
 /** How one space's two projections relate. */
@@ -67,16 +86,57 @@ export type SpaceStatus =
   | "missing-rust"
   | "missing-ts";
 
+/** One table the digest leaves out, and why the two cores may differ on it. */
+export interface IgnoredTable {
+  /** Exact table name, or a prefix ending in `*` (FTS5 shadow tables). */
+  match: string;
+  /** Why the log does not make the two sides agree here. */
+  reason: string;
+}
+
+/** One column's values on each side of a divergent row, as reported. */
+export interface ColumnDifference {
+  column: string;
+  /** The TS projection's value, presented (see `presented`). */
+  ts: string;
+  /** The shadow projection's value, presented. */
+  rust: string;
+}
+
+/** The first row two projections disagree on, and how they disagree. */
+export interface RowDifference {
+  /** Primary-key columns of that row; empty when the table declares no key. */
+  key: Record<string, string>;
+  /**
+   * Columns that differ. A row present on one side only lists every column,
+   * with `(no row)` on the side that lacks it.
+   */
+  columns: ColumnDifference[];
+}
+
+/** One table the two projections disagree on, with the evidence. */
+export interface TableDifference {
+  table: string;
+  /** Rows on the TS side. */
+  tsRows: number;
+  /** Rows on the shadow side. */
+  rustRows: number;
+  /** The first differing row, in canonical order; null if none could be paired. */
+  example: RowDifference | null;
+}
+
 /** One space's classification and, when compared, what the comparison found. */
 export interface SpaceDigest {
   space: string;
   status: SpaceStatus;
-  /** Tables `diffSnapshots` named; empty unless `divergent`. */
-  tables: string[];
+  /** Tables the two projections disagree on; empty unless `divergent`. */
+  divergences: TableDifference[];
   /** `materialization_cursor.materialized_to`; null when the row is absent. */
   tsCursor: number | null;
   /** `worker_cursor.idx`; null when the row is absent. */
   rustCursor: number | null;
+  /** Whether the shadow's DB file exists at all. */
+  rustDbPresent: boolean;
   /** `max(idx)` in `record_changes` for this stream; null when no changes exist. */
   tip: number | null;
   /** `space_schema_version.version` in the TS DB, when it could be read. */
@@ -141,6 +201,262 @@ export function spaceDidsIn(dir: string): string[] {
   return out.sort();
 }
 
+/**
+ * Tables the digest leaves out of the comparison, each for a reason the two
+ * cores' schemas make structural. Deliberately small: a table listed here is a
+ * table nothing checks, so an entry has to say why the log cannot make the two
+ * sides agree.
+ *
+ * The enrichment tables (`comp_embed_*`, `comp_info`) are absent on purpose.
+ * The sweeper writes them outside the log, which *may* explain a divergence,
+ * but a hypothesis is not a reason to hide the evidence.
+ */
+export const IGNORED_TABLES: readonly IgnoredTable[] = [
+  {
+    match: "message_fts*",
+    reason:
+      "full-text search stays in TypeScript (Rust core plan §10): the TS DB fills the FTS index and the shadow tables SQLite derives beside it, the Rust DB declares them and leaves them empty, so every space with a message differs here by construction",
+  },
+  {
+    match: "room_access",
+    reason:
+      "a documented read-path cache (READ_PATH_CACHES in src/streams/rebuildEquality.ts): reads warm it and materialisation does not, so it records which reads each side served rather than the log",
+  },
+  {
+    match: "room_activity",
+    reason:
+      "a documented read-path cache (READ_PATH_CACHES in src/streams/rebuildEquality.ts): maintained by live writes and reads and left empty by a rebuild, so it records traffic rather than the log prefix",
+  },
+];
+
+/** Whether `table` is covered by an {@link IGNORED_TABLES} entry. */
+export function isIgnoredTable(table: string): boolean {
+  return IGNORED_TABLES.some(({ match }) =>
+    match.endsWith("*") ? table.startsWith(match.slice(0, -1)) : table === match,
+  );
+}
+
+/** The ignored tables these readings contain, by exact name. */
+function ignoredNamesIn(...snapshots: readonly TableSnapshot[][]): string[] {
+  const names = new Set<string>();
+  for (const snapshot of snapshots) {
+    for (const { table } of snapshot) {
+      if (isIgnoredTable(table)) names.add(table);
+    }
+  }
+  return [...names];
+}
+
+/** The longest value the report quotes from a row. */
+export const VALUE_LIMIT = 80;
+const ABSENT_ROW = "(no row)";
+const ABSENT_COLUMN = "(no column)";
+
+/** A column the other side's schema does not declare. */
+const NO_COLUMN = Symbol("no column");
+
+/** A value's exact form, for comparing rows and pairing them by key. */
+function encoded(value: unknown): string {
+  if (value === NO_COLUMN) return "\u0000absent";
+  if (value instanceof Uint8Array) {
+    return `\u0000blob:${Buffer.from(value).toString("base64")}`;
+  }
+  if (typeof value === "bigint") return `\u0000bigint:${value.toString()}`;
+  return JSON.stringify(value) ?? "\u0000null";
+}
+
+/**
+ * A value as the report shows it: text truncated to `VALUE_LIMIT` characters,
+ * a blob as its size. The bytes of a blob are never quoted — a page's content
+ * or an image's payload would swamp the report and leak user data into logs.
+ */
+function presented(value: unknown): string {
+  if (value === NO_COLUMN) return ABSENT_COLUMN;
+  if (value === null) return "null";
+  if (value instanceof Uint8Array) return `blob(${value.byteLength} B)`;
+  const text = typeof value === "bigint" ? value.toString() : String(value);
+  return text.length <= VALUE_LIMIT
+    ? text
+    : `${text.slice(0, VALUE_LIMIT - 1)}…`;
+}
+
+/** The columns either side declares, TS order first. */
+function unionColumns(
+  ts: readonly string[],
+  rust: readonly string[],
+): string[] {
+  const union = [...ts];
+  for (const column of rust) if (!union.includes(column)) union.push(column);
+  return union;
+}
+
+/** `rows` re-read against `union`, with `NO_COLUMN` where a column is absent. */
+function unionRows(
+  rows: readonly unknown[][],
+  from: readonly string[],
+  union: readonly string[],
+): unknown[][] {
+  const indexes = union.map((column) => from.indexOf(column));
+  return rows.map((row) =>
+    indexes.map((index) => (index === -1 ? NO_COLUMN : row[index])),
+  );
+}
+
+/** Rows in the canonical order the digest compares in. */
+function canonicalOrder(rows: readonly unknown[][]): unknown[][] {
+  return rows
+    .map((row) => ({ row, key: row.map(encoded).join("\u0000") }))
+    .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
+    .map((entry) => entry.row);
+}
+
+/**
+ * Indexes of `table`'s primary-key columns in `union`, in key order.
+ *
+ * Read from whichever DB declares the table. A key column the snapshot dropped
+ * leaves the table without a usable key, and the example falls back to
+ * comparing rows positionally.
+ */
+async function primaryKeyIndexes(
+  dbs: readonly DbLike[],
+  table: string,
+  union: readonly string[],
+): Promise<number[]> {
+  const quoted = table.replace(/'/g, "''");
+  for (const db of dbs) {
+    let info: { name: string; pk: number }[];
+    try {
+      info = await db
+        .query(`select name, pk from pragma_table_info('${quoted}')`)
+        .all<{ name: string; pk: number }>();
+    } catch {
+      continue;
+    }
+    if (info.length === 0) continue;
+    const names = info
+      .filter((column) => column.pk > 0)
+      .sort((a, b) => a.pk - b.pk)
+      .map((column) => column.name);
+    const indexes = names.map((name) => union.indexOf(name));
+    return indexes.length > 0 && indexes.every((index) => index >= 0)
+      ? indexes
+      : [];
+  }
+  return [];
+}
+
+function keyRecord(
+  row: readonly unknown[],
+  union: readonly string[],
+  keyIndexes: readonly number[],
+): Record<string, string> {
+  const key: Record<string, string> = {};
+  for (const index of keyIndexes) key[union[index]!] = presented(row[index]);
+  return key;
+}
+
+function differingColumns(
+  ts: readonly unknown[],
+  rust: readonly unknown[],
+  union: readonly string[],
+): ColumnDifference[] {
+  const out: ColumnDifference[] = [];
+  for (let i = 0; i < union.length; i++) {
+    if (encoded(ts[i]) === encoded(rust[i])) continue;
+    out.push({
+      column: union[i]!,
+      ts: presented(ts[i]),
+      rust: presented(rust[i]),
+    });
+  }
+  return out;
+}
+
+/** A row only one side holds; every column is reported against `(no row)`. */
+function oneSidedExample(
+  row: readonly unknown[],
+  union: readonly string[],
+  keyIndexes: readonly number[],
+  side: "ts" | "rust",
+): RowDifference {
+  return {
+    key: keyRecord(row, union, keyIndexes),
+    columns: union.map((column, i) => ({
+      column,
+      ts: side === "ts" ? presented(row[i]) : ABSENT_ROW,
+      rust: side === "rust" ? presented(row[i]) : ABSENT_ROW,
+    })),
+  };
+}
+
+function keyedExample(
+  ts: readonly unknown[][],
+  rust: readonly unknown[][],
+  union: readonly string[],
+  keyIndexes: readonly number[],
+): RowDifference | null {
+  const keyOf = (row: readonly unknown[]) =>
+    keyIndexes.map((index) => encoded(row[index])).join("\u0001");
+  const rustByKey = new Map<string, unknown[]>();
+  for (const row of rust) {
+    const key = keyOf(row);
+    if (!rustByKey.has(key)) rustByKey.set(key, row);
+  }
+  const tsKeys = new Set(ts.map(keyOf));
+
+  for (const row of ts) {
+    const other = rustByKey.get(keyOf(row));
+    if (other === undefined) return oneSidedExample(row, union, keyIndexes, "ts");
+    const columns = differingColumns(row, other, union);
+    if (columns.length > 0) {
+      return { key: keyRecord(row, union, keyIndexes), columns };
+    }
+  }
+  for (const row of rust) {
+    if (!tsKeys.has(keyOf(row))) {
+      return oneSidedExample(row, union, keyIndexes, "rust");
+    }
+  }
+  return null;
+}
+
+function positionalExample(
+  ts: readonly unknown[][],
+  rust: readonly unknown[][],
+  union: readonly string[],
+): RowDifference | null {
+  for (let i = 0; i < Math.max(ts.length, rust.length); i++) {
+    const a = ts[i];
+    const b = rust[i];
+    if (a === undefined) return oneSidedExample(b!, union, [], "rust");
+    if (b === undefined) return oneSidedExample(a, union, [], "ts");
+    const columns = differingColumns(a, b, union);
+    if (columns.length > 0) return { key: {}, columns };
+  }
+  return null;
+}
+
+/** One diverging table, with the evidence a table name alone cannot carry. */
+function compareRows(
+  divergence: TableDivergence,
+  union: readonly string[],
+  keyIndexes: readonly number[],
+  tsColumns: readonly string[],
+  rustColumns: readonly string[],
+): TableDifference {
+  const ts = canonicalOrder(unionRows(divergence.before, tsColumns, union));
+  const rust = canonicalOrder(unionRows(divergence.after, rustColumns, union));
+  return {
+    table: divergence.table,
+    tsRows: divergence.before.length,
+    rustRows: divergence.after.length,
+    example:
+      keyIndexes.length === 0
+        ? positionalExample(ts, rust, union)
+        : keyedExample(ts, rust, union, keyIndexes),
+  };
+}
+
 /** One space's comparison. The events DB is open on the caller's side. */
 async function digestSpace(
   space: string,
@@ -150,9 +466,10 @@ async function digestSpace(
   const base: SpaceDigest = {
     space,
     status: "missing-ts",
-    tables: [],
+    divergences: [],
     tsCursor: null,
     rustCursor: null,
+    rustDbPresent: false,
     tip: null,
     schemaVersion: null,
     tsDigest: null,
@@ -161,6 +478,7 @@ async function digestSpace(
 
   const tsPath = join(opts.tsDir, `${space}${SPACE_DB_SUFFIX}`);
   const rustPath = join(opts.rustDir, `${space}${SPACE_DB_SUFFIX}`);
+  base.rustDbPresent = existsSync(rustPath);
   const tipRow = await events
     .query("select max(idx) as idx from record_changes where stream_id = ?")
     .get<{ idx: number | null }>([space]);
@@ -229,17 +547,38 @@ async function digestSpace(
     const tsSnapshot = workerSnapshot(await snapshotSpaceDb(ts));
     reading = "rust";
     const rustSnapshot = workerSnapshot(await snapshotSpaceDb(rust));
-    base.tsDigest = digestOf(tsSnapshot);
-    base.rustDigest = digestOf(rustSnapshot);
 
-    const diverging = diffSnapshots(tsSnapshot, rustSnapshot);
-    return diverging.length === 0
-      ? { ...base, status: "matching" }
-      : {
-          ...base,
-          status: "divergent",
-          tables: diverging.map((d) => d.table).sort(),
-        };
+    // The digests follow the comparison: a table the ignore list drops cannot
+    // make two otherwise-equal projections look different.
+    const ignored = ignoredNamesIn(tsSnapshot, rustSnapshot);
+    const ignoredSet = new Set(ignored);
+    const compared = (snapshot: TableSnapshot[]) =>
+      snapshot.filter((table) => !ignoredSet.has(table.table));
+    base.tsDigest = digestOf(compared(tsSnapshot));
+    base.rustDigest = digestOf(compared(rustSnapshot));
+
+    const diverging = diffSnapshots(tsSnapshot, rustSnapshot, ignored);
+    if (diverging.length === 0) return { ...base, status: "matching" };
+
+    const tsColumns = new Map(tsSnapshot.map((t) => [t.table, t.columns]));
+    const rustColumns = new Map(rustSnapshot.map((t) => [t.table, t.columns]));
+    const divergences: TableDifference[] = [];
+    for (const divergence of diverging) {
+      const union = unionColumns(
+        tsColumns.get(divergence.table) ?? [],
+        rustColumns.get(divergence.table) ?? [],
+      );
+      divergences.push(
+        compareRows(
+          divergence,
+          union,
+          await primaryKeyIndexes([ts, rust], divergence.table, union),
+          tsColumns.get(divergence.table) ?? [],
+          rustColumns.get(divergence.table) ?? [],
+        ),
+      );
+    }
+    return { ...base, status: "divergent", divergences };
   } catch (err) {
     return {
       ...base,
@@ -366,11 +705,17 @@ export function formatSummary(report: ShadowDigestReport): string {
     if (space.status === "matching") continue;
     const details: string[] = [];
     if (space.status === "divergent") {
-      details.push(`tables: ${space.tables.join(", ")}`);
+      details.push(space.divergences.map(formatDifference).join("; "));
     }
     if (space.status === "behind-ts" || space.status === "behind-rust") {
       details.push(
-        `ts=${space.tsCursor ?? "unset"} rust=${space.rustCursor ?? "unset"} tip=${space.tip ?? "unset"}`,
+        `ts=${space.tsCursor ?? "unset"} rust=${space.rustCursor ?? "unset"} ` +
+          `tip=${space.tip ?? "unset"} rust-db=${space.rustDbPresent ? "present" : "absent"}`,
+      );
+    }
+    if (space.status === "missing-ts" || space.status === "missing-rust") {
+      details.push(
+        `rust-db=${space.rustDbPresent ? "present" : "absent"}`,
       );
     }
     if (space.status === "schema-stale") {
@@ -386,6 +731,29 @@ export function formatSummary(report: ShadowDigestReport): string {
     );
   }
   return `${lines.join("\n")}\n`;
+}
+
+/**
+ * One divergent table as prose: both counts, then the first differing row's
+ * key and the columns that differ. The column list is capped so one wide row
+ * does not turn into a paragraph; the JSON report keeps every column.
+ */
+function formatDifference(difference: TableDifference): string {
+  const head =
+    `${difference.table} ts=${difference.tsRows} rust=${difference.rustRows}`;
+  const { example } = difference;
+  if (example === null) return head;
+  const key = Object.entries(example.key)
+    .map(([column, value]) => `${column}=${value}`)
+    .join(",");
+  const shown = example.columns.slice(0, 6);
+  const columns = shown
+    .map((column) => `${column.column}: ts=${column.ts} rust=${column.rust}`)
+    .join(", ");
+  const more = example.columns.length - shown.length;
+  return `${head} key=${key === "" ? "(none)" : key} differs: ${columns}${
+    more > 0 ? ` (+${more} more columns)` : ""
+  }`;
 }
 
 const USAGE =
