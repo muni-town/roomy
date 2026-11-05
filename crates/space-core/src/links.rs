@@ -35,13 +35,21 @@ pub fn extract_urls(text: &str) -> Vec<String> {
     urls
 }
 
+/// The blocks a rich-text body carries: the document object's `blocks` array,
+/// or a bare array of blocks. A body that is neither carries no blocks.
+#[must_use]
+pub fn blocks_of(body: &serde_json::Value) -> &[serde_json::Value] {
+    let blocks = match body.get("blocks") {
+        Some(blocks) => blocks,
+        None => body,
+    };
+    blocks.as_array().map_or(&[], Vec::as_slice)
+}
+
 /// The URLs a rich-text body names: every `#link` facet's URI, over the block
 /// types that carry facets.
-pub fn extract_facet_urls(blocks: &serde_json::Value) -> Vec<String> {
+pub fn extract_facet_urls(blocks: &[serde_json::Value]) -> Vec<String> {
     let mut urls: Vec<String> = Vec::new();
-    let Some(blocks) = blocks.as_array() else {
-        return urls;
-    };
     let mut collect = |facets: &serde_json::Value| {
         let Some(facets) = facets.as_array() else {
             return;
@@ -132,6 +140,105 @@ mod tests {
             },
             {"$type": "space.roomy.richtext.blocks#rule"}
         ]);
-        assert_eq!(extract_facet_urls(&blocks), vec!["https://example.com"]);
+        assert_eq!(
+            extract_facet_urls(blocks_of(&blocks)),
+            vec!["https://example.com"]
+        );
+    }
+
+    /// A rich-text body as the client serialises it, with two link facets.
+    fn document() -> serde_json::Value {
+        serde_json::json!({
+            "$type": "space.roomy.richtext.document",
+            "blocks": [
+                {
+                    "$type": "space.roomy.richtext.blocks#text",
+                    "text": "https://www.youtube.com/watch?v=J_IPgREVM2E",
+                    "facets": [
+                        {
+                            "index": {"byteStart": 0, "byteEnd": 43},
+                            "features": [
+                                {
+                                    "$type": "space.roomy.richtext.facet#link",
+                                    "uri": "https://www.youtube.com/watch?v=J_IPgREVM2E"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "$type": "space.roomy.richtext.blocks#text",
+                    "text": "and http://bend-lang.com/ too",
+                    "facets": [
+                        {
+                            "index": {"byteStart": 4, "byteEnd": 25},
+                            "features": [
+                                {
+                                    "$type": "space.roomy.richtext.facet#link",
+                                    "uri": "http://bend-lang.com/"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        })
+    }
+
+    #[test]
+    fn a_document_body_names_its_facet_urls_in_order() {
+        let body = document();
+        assert_eq!(
+            extract_facet_urls(blocks_of(&body)),
+            vec![
+                "https://www.youtube.com/watch?v=J_IPgREVM2E",
+                "http://bend-lang.com/",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_bare_block_array_is_still_a_body() {
+        let blocks = serde_json::json!([
+            {
+                "$type": "space.roomy.richtext.blocks#text",
+                "text": "https://example.com",
+                "facets": [
+                    {
+                        "index": {"byteStart": 0, "byteEnd": 19},
+                        "features": [
+                            {"$type": "space.roomy.richtext.facet#link", "uri": "https://example.com"}
+                        ]
+                    }
+                ]
+            }
+        ]);
+        assert_eq!(
+            extract_facet_urls(blocks_of(&blocks)),
+            vec!["https://example.com"]
+        );
+    }
+
+    #[test]
+    fn a_document_without_facets_names_no_urls() {
+        let body = serde_json::json!({
+            "$type": "space.roomy.richtext.document",
+            "blocks": [
+                {"$type": "space.roomy.richtext.blocks#text", "text": "no links here"},
+                {"$type": "space.roomy.richtext.blocks#rule"}
+            ]
+        });
+        assert!(extract_facet_urls(blocks_of(&body)).is_empty());
+    }
+
+    #[test]
+    fn a_body_that_is_not_blocks_names_no_urls() {
+        for body in [
+            serde_json::json!("https://example.com"),
+            serde_json::json!({"$type": "space.roomy.richtext.document"}),
+            serde_json::json!(42),
+        ] {
+            assert!(extract_facet_urls(blocks_of(&body)).is_empty());
+        }
     }
 }
