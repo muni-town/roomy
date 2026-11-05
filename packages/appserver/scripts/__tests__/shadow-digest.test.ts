@@ -34,7 +34,12 @@ import {
 } from "../../src/materialization/records/corpus.ts";
 import type { LoggedEvent } from "../../src/materialization/types.ts";
 import { writeRecordChanges } from "../../src/streams/recordChanges.ts";
-import { READ_PATH_CACHES } from "../../src/streams/rebuildEquality.ts";
+import {
+  READ_PATH_CACHES,
+  diffSnapshots,
+  digestOf,
+  type TableSnapshot,
+} from "../../src/streams/rebuildEquality.ts";
 import {
   IGNORED_TABLES,
   VALUE_LIMIT,
@@ -377,6 +382,78 @@ describe("row-level evidence", () => {
     expect(serialized).not.toContain(longText);
     expect(serialized).not.toContain(
       Buffer.from([0, 1, 2, 3]).toString("base64"),
+    );
+  }, 30_000);
+});
+
+describe("column order", () => {
+  test("the same rows with the same columns declared in a different order are matching", () => {
+    // A DB created before `suggest_to_others` existed was healed with an
+    // `alter table`, which appends the column; one created from
+    // `schema-space.sql` declares it before `created_at`. Same rows, different
+    // physical layout.
+    const healed: TableSnapshot[] = [
+      {
+        table: "comp_space",
+        columns: [
+          "entity",
+          "hidden",
+          "created_at",
+          "updated_at",
+          "suggest_to_others",
+        ],
+        rows: [
+          [STREAM, 0, SEEDED_AT, SEEDED_AT, null],
+          ["other", 1, SEEDED_AT, SEEDED_AT, 0],
+        ],
+      },
+    ];
+    const fresh: TableSnapshot[] = [
+      {
+        table: "comp_space",
+        columns: [
+          "entity",
+          "hidden",
+          "suggest_to_others",
+          "created_at",
+          "updated_at",
+        ],
+        rows: [
+          ["other", 1, 0, SEEDED_AT, SEEDED_AT],
+          [STREAM, 0, null, SEEDED_AT, SEEDED_AT],
+        ],
+      },
+    ];
+
+    expect(diffSnapshots(healed, fresh)).toEqual([]);
+    expect(digestOf(healed)).toBe(digestOf(fresh));
+  });
+});
+
+describe("clock skew", () => {
+  test("a table differing only on updated_at is clock-only, and the summary counts it apart from content", async () => {
+    const tip = await writeEvents(eventsPath);
+    await buildSpace(spacePath(tsDir));
+    await buildSpace(spacePath(rustDir));
+    setWorkerCursor(spacePath(rustDir), tip);
+
+    const rust = new Database(spacePath(rustDir));
+    rust.run("update comp_space set updated_at = updated_at + 1");
+    rust.run("update comp_room set label = 'tampered'");
+    rust.close();
+
+    const { report, exitCode } = await run();
+
+    expect(report.spaces[0]!.status).toBe("divergent");
+    const kinds = Object.fromEntries(
+      report.spaces[0]!.divergences.map((d) => [d.table, d.kind]),
+    );
+    expect(kinds).toEqual({ comp_room: "content", comp_space: "clock-only" });
+    expect(exitCode).toBe(1);
+
+    const summary = formatSummary(report);
+    expect(summary).toContain(
+      "1 table differs in content, 1 only in created_at/updated_at",
     );
   }, 30_000);
 });

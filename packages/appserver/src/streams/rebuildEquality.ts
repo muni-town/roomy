@@ -155,7 +155,10 @@ export function workerSnapshot(tables: TableSnapshot[]): TableSnapshot[] {
 /** One table's rows, as read out of a per-space DB. */
 export interface TableSnapshot {
   table: string;
-  /** The table's columns in declaration order, clock columns dropped. */
+  /**
+   * The table's columns, clock columns dropped. Rows follow this order, which
+   * need not be the order the other reading declares.
+   */
   columns: string[];
   /** Rows in canonical order; each row follows `columns`. */
   rows: unknown[][];
@@ -202,13 +205,12 @@ export interface FetchCall {
 /**
  * Read every derived per-space table into a snapshot.
  *
- * Columns come back in declaration order (what `pragma_table_info` reports, and
- * what `schema-space.sql` writes them in), so two readings of the same schema
- * line up column for column. Rows are ordered by the canonical encoding the
- * comparison and the digest both use, so a table holding the same rows in a
- * different physical order still reads the same. The clock columns and the
- * non-derived tables are dropped; the read-path caches are kept, because
- * whether they belong in a comparison depends on what is being compared.
+ * Columns come back in declaration order (what `pragma_table_info` reports).
+ * Rows are ordered by the canonical encoding the comparison and the digest
+ * both use, so a table holding the same rows in a different physical order
+ * still reads the same. The clock columns and the non-derived tables are
+ * dropped; the read-path caches are kept, because whether they belong in a
+ * comparison depends on what is being compared.
  */
 export async function snapshotSpaceDb(
   spaceDb: DbLike,
@@ -249,8 +251,8 @@ export async function snapshotSpaceDb(
  * The two readings may come from any two derivations — two runs of the TS
  * materialiser, or one TS run and one Rust run. A table present on only one
  * side is a divergence, reported with an empty row list on the missing side.
- * Rows are put in canonical order first, so a reading does not have to be
- * sorted by whoever produced it.
+ * Rows are compared by column name (see `canonicalTable`), so two readings
+ * that declare the same columns in a different order compare equal.
  */
 export function diffSnapshots(
   before: TableSnapshot[],
@@ -266,10 +268,7 @@ export function diffSnapshots(
     if (ignored.has(table.table)) continue;
     compared.add(table.table);
     const other = afterByTable.get(table.table);
-    const reading = canonicalRows(table.rows).map(encodeRow).join("\n");
-    if (other && canonicalRows(other.rows).map(encodeRow).join("\n") === reading) {
-      continue;
-    }
+    if (other && encodeTable(other) === encodeTable(table)) continue;
     diverging.push({
       table: table.table,
       before: table.rows,
@@ -289,24 +288,23 @@ export function diffSnapshots(
  * SHA-256 over a snapshot, in the canonical encoding defined at `encodeRow`:
  *
  *   for each table, in ascending table-name order:
- *     table name, ":", JSON array of the columns, "\n",
+ *     table name, ":", JSON array of the columns sorted by name, "\n",
  *     then one line per row, each line the JSON array of the row's values.
  *
- * Both the tables and the rows are put in canonical order first, so the digest
- * depends on the rows a reading holds and not on the order they were read in —
- * a caller that built a snapshot by hand, or read one from another
- * implementation, does not have to sort it. A table with no rows contributes its
- * name and columns and nothing else.
+ * Tables, columns and rows are put in canonical order first, so the digest
+ * depends on the rows a reading holds and not on the order they were read or
+ * declared in — a caller that built a snapshot by hand, or read one from
+ * another implementation, does not have to sort or align it. A table with no
+ * rows contributes its name and columns and nothing else.
  */
 export function digestOf(tables: TableSnapshot[]): string {
   const hash = createHash("sha256");
   for (const table of [...tables].sort((a, b) =>
     a.table < b.table ? -1 : a.table > b.table ? 1 : 0,
   )) {
-    hash.update(`${table.table}:${JSON.stringify(table.columns)}\n`);
-    for (const row of canonicalRows(table.rows)) {
-      hash.update(`${encodeRow(row)}\n`);
-    }
+    const { columns, rows } = canonicalTable(table);
+    hash.update(`${table.table}:${JSON.stringify(columns)}\n`);
+    for (const row of rows) hash.update(`${encodeRow(row)}\n`);
   }
   return hash.digest("hex");
 }
@@ -406,6 +404,38 @@ export async function recordFetchCalls<T>(
   } finally {
     globalThis.fetch = real;
   }
+}
+
+/**
+ * One table in the form the comparison and the digest hash: columns sorted by
+ * name, rows in canonical order, each row following the sorted columns.
+ *
+ * Two readings of one table can declare the same columns in a different
+ * order. A DB created before a column existed is healed with
+ * `alter table … add column`, which appends it; a DB created from
+ * `schema-space.sql` declares it where the schema line puts it. The values are
+ * the same either way, so the position a column happens to hold must not read
+ * as a difference.
+ */
+function canonicalTable(table: TableSnapshot): {
+  columns: string[];
+  rows: unknown[][];
+} {
+  const order = table.columns
+    .map((column, index) => ({ column, index }))
+    .sort((a, b) => (a.column < b.column ? -1 : a.column > b.column ? 1 : 0));
+  return {
+    columns: order.map((entry) => entry.column),
+    rows: canonicalRows(
+      table.rows.map((row) => order.map((entry) => row[entry.index])),
+    ),
+  };
+}
+
+/** A table's canonical encoding: its columns, then one line per row. */
+function encodeTable(table: TableSnapshot): string {
+  const { columns, rows } = canonicalTable(table);
+  return [JSON.stringify(columns), ...rows.map(encodeRow)].join("\n");
 }
 
 /**
