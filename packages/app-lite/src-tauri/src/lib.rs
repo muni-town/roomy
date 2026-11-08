@@ -63,16 +63,18 @@ fn bring_to_front(app: &tauri::AppHandle) {
 }
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let mut builder = Builder::default().plugin(navigation_policy());
+    let mut builder = Builder::default();
     #[cfg(desktop)]
     {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-          log::info!("a new app instance was opened with {args:?} and the deep link event was already triggered");
+        builder = builder
+          .plugin(tauri_plugin_notification::init())
+          .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+              log::info!("a new app instance was opened with {args:?} and the deep link event was already triggered");
 
-          // focus running instance when new app instance is requested
-          let _ = app.get_webview_window("main")
-           .expect("no main window")
-           .set_focus();
+              // focus running instance when new app instance is requested
+              let _ = app.get_webview_window("main")
+               .expect("no main window")
+               .set_focus();
         }));
     }
     #[cfg(mobile)]
@@ -86,6 +88,7 @@ pub fn run() {
         );
     }
     builder
+        .plugin(navigation_policy())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_deep_link::init())
@@ -95,23 +98,22 @@ pub fn run() {
         // (`src/lib/cache-store.ts`), which opens it with this plugin's JS API.
         .plugin(tauri_plugin_store::Builder::new().build())
         .setup(|app| {
-            #[cfg(desktop)]
-            let _ = app
-                .handle()
-                .plugin(tauri_plugin_updater::Builder::new().build());
             // runtime deep_link registration
             #[cfg(any(target_os = "linux", windows))]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 app.deep_link().register_all()?;
             }
-
-            // Desktop OAuth: the PDS authorization page opens in the system
-            // browser, and the callback returns as a `space.roomy:` deep link.
-            // Bring the app forward so the user sees the login complete instead
-            // of having to find the window behind the browser.
             #[cfg(desktop)]
             {
+                let _ = app
+                    .handle()
+                    .plugin(tauri_plugin_updater::Builder::new().build());
+
+                // Desktop OAuth: the PDS authorization page opens in the system
+                // browser, and the callback returns as a `space.roomy:` deep link.
+                // Bring the app forward so the user sees the login complete instead
+                // of having to find the window behind the browser.
                 use tauri_plugin_deep_link::DeepLinkExt;
                 let handle = app.handle().clone();
                 app.deep_link().on_open_url(move |event| {
