@@ -120,8 +120,72 @@ pub fn run() {
                     log::info!("deep link received: {:?}", event.urls());
                     bring_to_front(&handle);
                 });
-            }
 
+                // setup tray
+                use tauri::{
+                    menu::{Menu, MenuItem},
+                    tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
+                };
+
+                let toggle =
+                    MenuItem::with_id(app, "toggle", "Toggle", true, None::<&str>).unwrap();
+                let menu = Menu::with_items(
+                    app,
+                    &[
+                        &toggle,
+                        &MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?,
+                        &MenuItem::with_id(app, "restart", "Restart", true, None::<&str>)?,
+                    ],
+                )?;
+                let _ = TrayIconBuilder::new()
+                    .menu(&menu)
+                    .show_menu_on_left_click(false)
+                    .on_tray_icon_event(|tray, event| match event {
+                        TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: tauri::tray::MouseButtonState::Up,
+                            ..
+                        } => {
+                            let app = tray.app_handle();
+                            if let Some(window) = app.get_webview_window("main") {
+                                if let Ok(visible) = window.is_visible() {
+                                    if visible {
+                                        let _ = window.hide();
+                                    } else {
+                                        let _ = window.unminimize();
+                                        let _ = window.show();
+                                        let _ = window.set_focus();
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    })
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        "toggle" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                if window.is_visible().unwrap() {
+                                    let _ = window.hide();
+                                } else {
+                                    let _ = window.unminimize();
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+                                }
+                            }
+                        }
+                        "restart" => {
+                            app.request_restart();
+                        }
+                        _ => {
+                            println!("unhandled menu item: {:?}", event.id)
+                        }
+                    })
+                    .icon(app.default_window_icon().unwrap().clone())
+                    .build(app)?;
+            }
             #[cfg(debug_assertions)]
             {
                 app.handle().plugin(
@@ -134,6 +198,13 @@ pub fn run() {
                 )?;
             }
             Ok(())
+        })
+        .on_window_event(move |window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                let _ = window.hide();
+                api.prevent_close();
+            }
+            _ => {}
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
