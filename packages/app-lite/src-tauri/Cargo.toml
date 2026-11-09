@@ -33,10 +33,11 @@ tauri-plugin-store = "~2.4.5"
 tauri-plugin-http = "2"
 tauri-plugin-process = "2"
 ureq = "3.2.1"
+getrandom = "0.4"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = {version = "2", features = ["deep-link"] }
-tauri-plugin-notification = "2"
+notify-rust = "4"
 tauri-plugin-updater = "2"
 
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
