@@ -99,7 +99,7 @@ function loadPlugin(): Promise<MobilePushPlugin> {
  * type declarations (the app imports only some namespaces from the API
  * package), so it is read through `in`/`typeof` narrowing rather than a cast.
  */
-function tauriOsPlatform(): unknown {
+export function tauriOsPlatform(): unknown {
   if (typeof window === "undefined") return null;
   // Same runtime check the updater uses: the shell exposes `__TAURI__`
   // (config sets `withGlobalTauri: true`), the web app does not.
