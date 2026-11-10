@@ -208,8 +208,8 @@ pub fn run() {
                 api.prevent_close();
             }
             #[cfg(desktop)]
-            tauri::WindowEvent::Focused(true)=> push_stream::clear_unseen(window.app_handle()),
-            _=> {}
+            tauri::WindowEvent::Focused(true) => push_stream::clear_unseen(window.app_handle()),
+            _ => {}
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

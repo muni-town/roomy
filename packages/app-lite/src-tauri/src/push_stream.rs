@@ -3,7 +3,7 @@ use std::{
     collections::HashSet,
     io::{BufRead, BufReader},
     sync::{
-        atomic::{AtomicU64, AtomicU32, Ordering},
+        atomic::{AtomicU32, AtomicU64, Ordering},
         mpsc::{channel, Receiver, RecvTimeoutError, Sender},
         Mutex,
     },
@@ -12,8 +12,7 @@ use std::{
 };
 
 use serde_json::Value;
-use tauri::{AppHandle, Emitter, Manager, State, image::Image};
-
+use tauri::{image::Image, AppHandle, Emitter, Manager, State};
 
 // ----------------------------------
 // badge generation
@@ -42,14 +41,17 @@ pub fn clear_unseen(app: &AppHandle) {
 
 fn add_unseen(app: &AppHandle, added: u32) {
     let state = app.state::<PushStreamState>();
-    let unseen = state.unseen.fetch_add(added, Ordering::SeqCst).saturating_add(added);
+    let unseen = state
+        .unseen
+        .fetch_add(added, Ordering::SeqCst)
+        .saturating_add(added);
     refresh_badge(app, unseen);
 }
 
 fn refresh_badge(app: &AppHandle, unseen: u32) {
-    // sol: this can run on other platforms but afaik has no convention
-    // on "Desktop Linux" and on macos, is expected to either be monochrome
-    // with additional data to the side
+    // sol: this can run on other platforms but afaik "Desktop Linux"
+    // has no convention on and on macos, is expected to either
+    // be monochrome with additional data to the side
     #[cfg(windows)]
     if let Some(tray) = app.tray_by_id(crate::TRAY_ID) {
         let icon = if unseen > 0 {
@@ -115,7 +117,7 @@ impl PushStreamState {
             token_sender,
             token_receiver: Mutex::new(token_receiver),
             active_room: Mutex::new(None),
-            unseen: AtomicU32::new(0)
+            unseen: AtomicU32::new(0),
         }
     }
 }
@@ -569,7 +571,10 @@ mod tests {
             texts,
             vec![
                 ("Ada in general".to_string(), "hello".to_string()),
-                ("4 new messages in general".to_string(), "4 new messages".to_string()),
+                (
+                    "4 new messages in general".to_string(),
+                    "4 new messages".to_string()
+                ),
             ]
         );
     }
