@@ -443,3 +443,130 @@ fn show_notification(app: AppHandle, data: &str) {
         }
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn events(lines: &[&str]) -> Vec<(String, String)> {
+        let mut event = SseEvent::default();
+        lines
+            .iter()
+            .filter_map(|line| parse_event(&mut event, line))
+            .map(|event| (event.name, event.data))
+            .collect()
+    }
+
+    #[test]
+    fn stream_lines_become_notification_text() {
+        let lines = [
+            "event: ready",
+            r#"data: {"maxAgeMs":3600000}"#,
+            "",
+            ": keepalive",
+            "event: push",
+            r#"data: {"type":"message","roomName":"general","authorName":"Ada","messageContent":"hello"}"#,
+            "",
+            "event: push",
+            r#"data: {"type":"digest","roomName":"general","count":4}"#,
+            "",
+        ];
+
+        let texts: Vec<(String, String)> = events(&lines)
+            .into_iter()
+            .filter(|(name, _)| name == "push")
+            .map(|(_, data)| {
+                let payload: Value = serde_json::from_str(&data).expect("push data is JSON");
+                notification_text(&payload)
+            })
+            .collect();
+
+        assert_eq!(
+            texts,
+            vec![
+                ("Ada in general".to_string(), "hello".to_string()),
+                ("4 new messages in general".to_string(), "4 new messages".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn parses_a_named_event() {
+        let parsed = events(&["event: push", "data: {\"a\":1}", ""]);
+        assert_eq!(parsed, vec![("push".into(), "{\"a\":1}".into())]);
+    }
+
+    #[test]
+    fn unnamed_events_are_messages() {
+        let parsed = events(&["data: hi", ""]);
+        assert_eq!(parsed, vec![("message".into(), "hi".into())]);
+    }
+
+    #[test]
+    fn joins_data_lines_with_newlines() {
+        let parsed = events(&["data: one", "data: two", ""]);
+        assert_eq!(parsed, vec![("message".into(), "one\ntwo".into())]);
+    }
+
+    #[test]
+    fn ignores_comments_and_empty_events() {
+        assert!(events(&[": keepalive", "", "event: ready", ""]).is_empty());
+    }
+
+    #[test]
+    fn keeps_a_value_without_the_leading_space() {
+        let parsed = events(&["data:tight", ""]);
+        assert_eq!(parsed, vec![("message".into(), "tight".into())]);
+    }
+
+    #[test]
+    fn one_event_does_not_leak_into_the_next() {
+        let parsed = events(&["event: a", "data: 1", "", "data: 2", ""]);
+        assert_eq!(
+            parsed,
+            vec![("a".into(), "1".into()), ("message".into(), "2".into())]
+        );
+    }
+
+    #[test]
+    fn message_text() {
+        let payload = json!({
+            "type": "message",
+            "roomName": "general",
+            "authorName": "Ada",
+            "messageContent": "hello",
+        });
+        assert_eq!(
+            notification_text(&payload),
+            ("Ada in general".into(), "hello".into())
+        );
+    }
+
+    #[test]
+    fn message_text_without_author_or_content() {
+        let payload = json!({ "type": "message", "roomName": "general" });
+        assert_eq!(
+            notification_text(&payload),
+            ("New message in general".into(), "New message".into())
+        );
+    }
+
+    #[test]
+    fn digest_text() {
+        let payload = json!({ "type": "digest", "roomName": "general", "count": 4 });
+        assert_eq!(
+            notification_text(&payload),
+            ("4 new messages in general".into(), "4 new messages".into())
+        );
+    }
+
+    #[test]
+    fn backoff_stays_between_half_and_the_cap() {
+        for attempt in 0..20 {
+            let delay = backoff_delay(attempt);
+            assert!(delay >= BASE_BACKOFF / 2);
+            assert!(delay <= MAX_BACKOFF);
+        }
+    }
+}
