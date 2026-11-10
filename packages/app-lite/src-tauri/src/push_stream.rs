@@ -3,7 +3,7 @@ use std::{
     collections::HashSet,
     io::{BufRead, BufReader},
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicU64, AtomicU32, Ordering},
         mpsc::{channel, Receiver, RecvTimeoutError, Sender},
         Mutex,
     },
@@ -12,7 +12,78 @@ use std::{
 };
 
 use serde_json::Value;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State, image::Image};
+
+
+// ----------------------------------
+// badge generation
+const TRAY_DOT_ICON: &[u8] = include_bytes!("./assets/tray-dot.png");
+
+// #[cfg(windows)]
+const OVERLAY_ICONS: [&[u8]; 10] = [
+    include_bytes!("./assets/badge/1.png"),
+    include_bytes!("./assets/badge/2.png"),
+    include_bytes!("./assets/badge/3.png"),
+    include_bytes!("./assets/badge/4.png"),
+    include_bytes!("./assets/badge/5.png"),
+    include_bytes!("./assets/badge/6.png"),
+    include_bytes!("./assets/badge/7.png"),
+    include_bytes!("./assets/badge/8.png"),
+    include_bytes!("./assets/badge/9.png"),
+    include_bytes!("./assets/badge/9plus.png"),
+];
+
+pub fn clear_unseen(app: &AppHandle) {
+    let state = app.state::<PushStreamState>();
+    if state.unseen.swap(0, Ordering::SeqCst) > 0 {
+        refresh_badge(app, 0);
+    }
+}
+
+fn add_unseen(app: &AppHandle, added: u32) {
+    let state = app.state::<PushStreamState>();
+    let unseen = state.unseen.fetch_add(added, Ordering::SeqCst).saturating_add(added);
+    refresh_badge(app, unseen);
+}
+
+fn refresh_badge(app: &AppHandle, unseen: u32) {
+    // sol: this can run on other platforms but afaik has no convention
+    // on "Desktop Linux" and on macos, is expected to either be monochrome
+    // with additional data to the side
+    #[cfg(windows)]
+    if let Some(tray) = app.tray_by_id(crate::TRAY_ID) {
+        let icon = if unseen > 0 {
+            Image::from_bytes(TRAY_DOT_ICON).ok()
+        } else {
+            app.default_window_icon().cloned()
+        };
+        if let Err(err) = tray.set_icon(icon) {
+            log::warn!("push stream: could not set tray icon: {err}");
+        }
+    }
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    #[cfg(target_os = "macos")]
+    if let Err(err) = window.set_badge_count((unseen > 0).then_some(i64::from(unseen))) {
+        log::warn!("push stream: could not set dock badge: {err}");
+    }
+    #[cfg(windows)]
+    {
+        let index = unseen.clamp(1, 10) as usize - 1;
+        let overlay = if unseen > 0 {
+            Image::from_bytes(OVERLAY_ICONS[index]).ok()
+        } else {
+            None
+        };
+        if let Err(err) = window.set_overlay_icon(overlay) {
+            log::warn!("push stream: could not set taskbar overlay: {err}");
+        }
+    }
+}
+
+// ----------------------------------
+// stream handling
 
 const TOKEN_TIMEOUT: Duration = Duration::from_secs(15);
 // The server sends a keepalive every 20 seconds.
@@ -33,6 +104,7 @@ pub struct PushStreamState {
     token_sender: Sender<String>,
     token_receiver: Mutex<Receiver<String>>,
     active_room: Mutex<Option<String>>,
+    unseen: AtomicU32,
 }
 
 impl PushStreamState {
@@ -43,6 +115,7 @@ impl PushStreamState {
             token_sender,
             token_receiver: Mutex::new(token_receiver),
             active_room: Mutex::new(None),
+            unseen: AtomicU32::new(0)
         }
     }
 }
@@ -348,6 +421,9 @@ fn run_stream(app: AppHandle, generation: u64, server_url: String, endpoint: Str
     }
 }
 
+// ----------------------------------
+// emit notifications
+
 fn string_field(payload: &Value, key: &str) -> Option<String> {
     payload
         .get(key)
@@ -380,7 +456,18 @@ fn notification_text(payload: &Value) -> (String, String) {
     (title, body)
 }
 
-/// True if the window is focused on the room this push is for.
+/// True if the user can see the main window.
+fn is_window_in_use(app: &AppHandle) -> bool {
+    let Some(window) = app.get_webview_window("main") else {
+        return false;
+    };
+    // Some platforms keep reporting focus for a minimized or hidden window.
+    window.is_visible().unwrap_or(false)
+        && !window.is_minimized().unwrap_or(true)
+        && window.is_focused().unwrap_or(false)
+}
+
+/// True if the user can see the room this push is for.
 fn is_viewing_room(app: &AppHandle, payload: &Value) -> bool {
     let Some(room_id) = string_field(payload, "roomId") else {
         return false;
@@ -389,15 +476,7 @@ fn is_viewing_room(app: &AppHandle, payload: &Value) -> bool {
     let Ok(active_room) = state.active_room.lock() else {
         return false;
     };
-    if active_room.as_deref() != Some(room_id.as_str()) {
-        return false;
-    }
-    let Some(window) = app.get_webview_window("main") else {
-      return false;
-    };
-    window.is_visible().unwrap_or(false)
-      && !window.is_minimized().unwrap_or(true)
-      && window.is_focused().unwrap_or(false)
+    active_room.as_deref() == Some(room_id.as_str()) && is_window_in_use(app)
 }
 
 fn show_notification(app: AppHandle, data: &str) {
@@ -414,6 +493,16 @@ fn show_notification(app: AppHandle, data: &str) {
     if is_viewing_room(&app, &payload) {
         return;
     }
+    if !is_window_in_use(&app) {
+        let is_digest = string_field(&payload, "type").as_deref() == Some("digest");
+        let added = if is_digest {
+            payload.get("count").and_then(Value::as_u64).unwrap_or(1)
+        } else {
+            1
+        };
+        add_unseen(&app, added.min(1000) as u32);
+    }
+
     let (title, body) = notification_text(&payload);
     let icon = string_field(&payload, "icon").unwrap_or_default();
     let data = data.to_string();

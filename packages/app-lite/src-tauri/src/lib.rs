@@ -129,7 +129,7 @@ pub fn run() {
                     menu::{Menu, MenuItem},
                     tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
                 };
-
+                pub const TRAY_ID: &str = "main";
                 let toggle =
                     MenuItem::with_id(app, "toggle", "Toggle", true, None::<&str>).unwrap();
                 let menu = Menu::with_items(
@@ -140,7 +140,7 @@ pub fn run() {
                         &MenuItem::with_id(app, "restart", "Restart", true, None::<&str>)?,
                     ],
                 )?;
-                let _ = TrayIconBuilder::new()
+                let _ = TrayIconBuilder::with_id(TRAY_ID)
                     .menu(&menu)
                     .show_menu_on_left_click(false)
                     .on_tray_icon_event(|tray, event| match event {
@@ -202,11 +202,14 @@ pub fn run() {
             }
             Ok(())
         })
-        .on_window_event(move |window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+        .on_window_event(move |window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
                 let _ = window.hide();
                 api.prevent_close();
             }
+            #[cfg(desktop)]
+            tauri::WindowEvent::Focused(true)=> push_stream::clear_unseen(window.app_handle()),
+            _=> {}
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
