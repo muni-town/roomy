@@ -7,6 +7,7 @@
   import { auth, init, logout, updateProfile } from "$lib/auth.svelte";
   import { loadLastLogin } from "$lib/last-login.svelte";
   import { installNativePushListeners } from "$lib/native-push";
+  import { reportActiveRoom } from "$lib/desktop-push";
   import { installExternalLinkHandler } from "$lib/external-link-handler";
   import { installPushDebug } from "$lib/push-debug";
   import { preloadSpaceSidebars } from "$lib/preload";
@@ -168,6 +169,7 @@
   // user who could have recovered refusing to reload for the rest of it.
   afterNavigate((navigation) => {
     noteSuccessfulNavigation(navigation.type);
+    void reportActiveRoom(navigation.to?.params?.room ?? null);
   });
 
   // Fetch ATProto profile as soon as we're authenticated.

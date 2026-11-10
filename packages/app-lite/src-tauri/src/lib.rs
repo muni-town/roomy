@@ -77,6 +77,7 @@ pub fn run() {
             push_stream::push_stream_stop,
             push_stream::push_stream_provide_token,
             push_stream::push_stream_endpoint_new,
+            push_stream::push_stream_set_active_room,
           ]);
     }
     #[cfg(mobile)]
