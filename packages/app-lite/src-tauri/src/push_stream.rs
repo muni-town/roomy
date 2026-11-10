@@ -400,7 +400,6 @@ fn is_viewing_room(app: &AppHandle, payload: &Value) -> bool {
       && window.is_focused().unwrap_or(false)
 }
 
-#[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
 fn show_notification(app: AppHandle, data: &str) {
     let payload: Value = match serde_json::from_str(data) {
         Ok(payload) => {
@@ -425,21 +424,16 @@ fn show_notification(app: AppHandle, data: &str) {
         if !icon.is_empty() {
             notification.icon(&icon);
         }
-        // Click handling needs notify-rust's D-Bus API. Only Linux has it.
-        #[cfg(target_os = "linux")]
         notification.action("default", "Open");
 
         match notification.show() {
             Err(err) => log::warn!("push stream: could not show notification: {err}"),
-            #[cfg(target_os = "linux")]
             Ok(handle) => handle.wait_for_action(|action| {
                 if action == "default" {
                     bring_to_front(&app);
                     let _ = app.emit(NOTIFICATION_CLICKED_EVENT, &data);
                 }
             }),
-            #[cfg(not(target_os = "linux"))]
-            Ok(_) => {}
         }
     });
 }
