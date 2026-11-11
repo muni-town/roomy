@@ -1,0 +1,115 @@
+TODO!: add google-services.json
+       change tauri install to pnpm dlx
+       run from working-directory
+       move into release-tauri.yml (replacing or adding to?) apk build
+
+name: Build Android AAB
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-android-aab:
+    permissions:
+      contents: read
+      id-token: 'write'
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Get app version
+        shell: bash
+        run: echo "APP_VERSION=$(jq -r .version packages/app-lite/src-tauri/tauri.conf.json)" >> $GITHUB_ENV
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+      - name: Setup node
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: 'pnpm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: '.packages/app-lite/src-tauri -> target'
+
+      - name: Setup java
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r28c
+          local-cache: false
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+
+      - name: Generate Build Assets
+        run: |
+          pnpm install
+          pnpm -w add @tauri-apps/cli@2.11
+          pnpm turbo run build-lib
+          cd ./packages/app-lite
+          pnpm build
+
+      - name: Init android
+        run: |
+          cd ./packages/app-lite
+          pnpm tauri android init
+          ./scripts/copy-android-assets.sh
+          pnpm tauri icon ./src-tauri/icon.manifest.json
+          cd ./src-tauri/gen/android
+          if [ -n "${{ secrets.ANDROID_KEY_BASE64 }}" ]; then
+            echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" > keystore.properties
+            echo "password=${{ secrets.ANDROID_KEY_PASSWORD }}" >> keystore.properties
+            # generate keystore.jks locally and add to secrets with `base64 -i keystore.jks`
+            base64 -d <<< "${{ secrets.ANDROID_KEY_BASE64 }}" > $RUNNER_TEMP/keystore.jks
+            echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
+          fi
+
+      - name: Build Android AAB
+        run: |
+          cd ./packages/app-lite
+          pnpm tauri android build --aab
+        env:
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: roomy${{ env.APP_VERSION }}.aab
+          path: ${{ github.workspace }}/packages/app-lite/src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab
+          if-no-files-found: error
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/849612607524/locations/global/workloadIdentityPools/github/providers/roomy-repo
+          service_account: roomy-ghci@fast-incentive-505509-m6.iam.gserviceaccount.com
+
+      - uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: ${{ steps.auth.outputs.credentials_file_path }}
+          packageName: space.roomy
+          releaseFiles: ${{ github.workspace }}/packages/app-lite/src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab
+          tracks: ${{ startsWith(github.ref, 'refs/tags/v') && 'alpha' || 'alpha' }}
+          inAppUpdatePriority: 1
+          status: completed
+          # whatsNewDirectory:  github.workspace }}/packages/app-lite/src-tauri/android/app/src/main/listings/en-US/whatsnew
+          mappingFile: packages/app-lite/src-tauri/gen/android/app/build/outputs/mapping/universalRelease/mapping.txt
+          debugSymbols: packages/app-lite/src-tauri/gen/android/app/build/intermediates/merged_native_libs/universalRelease/mergeUniversalReleaseNativeLibs/out/lib
+
