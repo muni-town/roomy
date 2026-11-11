@@ -37,6 +37,13 @@ import {
   nativePushSupported,
   registerNativeToken,
 } from "$lib/native-push";
+import {
+  clearDesktopSubscription,
+  desktopPushSupported,
+  ensureDesktopSubscription,
+  lastDesktopEndpoint,
+  resumeDesktopStream,
+} from "$lib/desktop-push";
 
 /** localStorage key for the last endpoint we registered (idempotency hint). */
 const LAST_ENDPOINT_KEY = "roomy.push.lastEndpoint";
@@ -168,6 +175,7 @@ function pushServiceHost(endpoint: string | null | undefined): string {
  */
 export async function getPushSubscriptionEndpoint(): Promise<string | null> {
   if (nativePushSupported()) return lastNativeToken();
+  if (desktopPushSupported()) return lastDesktopEndpoint();
   if (!supportsPush()) return null;
   if (typeof Notification !== "undefined" && Notification.permission !== "granted") {
     return null;
@@ -206,6 +214,7 @@ export function base64UrlToUint8Array(base64Url: string): Uint8Array {
  */
 export async function ensurePushSubscription(): Promise<PushOutcome> {
   if (nativePushSupported()) return fromNative(await ensureNativeSubscription());
+  if (desktopPushSupported()) return fromNative(await ensureDesktopSubscription());
   if (!supportsPush()) return { status: "unsupported" };
 
   // Request permission FIRST, synchronously within the gesture (no prior
@@ -236,6 +245,10 @@ export async function ensurePushSubscription(): Promise<PushOutcome> {
  */
 export async function subscribeIfAlreadyPermitted(): Promise<void> {
   console.debug("[push:login] subscribeIfAlreadyPermitted starting");
+  if (desktopPushSupported()) {
+    await resumeDesktopStream();
+    return;
+  }
   if (nativePushSupported()) {
     const token = lastNativeToken();
     if (token === null) {
@@ -345,6 +358,7 @@ async function subscribeAndRegister(): Promise<PushOutcome> {
  */
 export async function clearPushSubscription(): Promise<PushOutcome> {
   if (nativePushSupported()) return fromNative(await clearNativeSubscription());
+  if (desktopPushSupported()) return fromNative(await clearDesktopSubscription());
   if (!supportsPush()) return { status: "unsupported" };
   try {
     // A tab with no registration has nothing to clear — and awaits nothing,

@@ -734,6 +734,12 @@ export async function logout() {
   location.reload();
 }
 
+/** A service-auth token for callers outside the webview's XRPC client. */
+export async function appserverServiceToken(lxm: string): Promise<string> {
+  if (!serviceAuth) throw new Error("Not authenticated");
+  return serviceAuth.getToken(CONFIG.appserverDid, lxm);
+}
+
 /**
  * Get the XRPC client for making typed calls to the appserver.
  *

@@ -1,5 +1,8 @@
 mod navigation;
 
+#[cfg(desktop)]
+mod push_stream;
+
 use tauri::{Builder, Manager, Url};
 
 /// Plugin that keeps the webview on the app's own document.
@@ -50,22 +53,32 @@ fn bring_to_front(app: &tauri::AppHandle) {
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
+    let _ = window.show();
     let _ = window.unminimize();
     let _ = window.set_focus();
 }
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let mut builder = Builder::default().plugin(navigation_policy());
+    let mut builder = Builder::default();
     #[cfg(desktop)]
     {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-          log::info!("a new app instance was opened with {args:?} and the deep link event was already triggered");
+        builder = builder
+          .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+              log::info!("a new app instance was opened with {args:?} and the deep link event was already triggered");
 
-          // focus running instance when new app instance is requested
-          let _ = app.get_webview_window("main")
-           .expect("no main window")
-           .set_focus();
-        }));
+              // focus running instance when new app instance is requested
+              let _ = app.get_webview_window("main")
+               .expect("no main window")
+               .set_focus();
+          }))
+          .manage(push_stream::PushStreamState::new())
+          .invoke_handler(tauri::generate_handler![
+            push_stream::push_stream_start,
+            push_stream::push_stream_stop,
+            push_stream::push_stream_provide_token,
+            push_stream::push_stream_endpoint_new,
+            push_stream::push_stream_set_active_room,
+          ]);
     }
     #[cfg(mobile)]
     {
@@ -78,6 +91,7 @@ pub fn run() {
         );
     }
     builder
+        .plugin(navigation_policy())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_deep_link::init())
@@ -87,31 +101,94 @@ pub fn run() {
         // (`src/lib/cache-store.ts`), which opens it with this plugin's JS API.
         .plugin(tauri_plugin_store::Builder::new().build())
         .setup(|app| {
-            #[cfg(desktop)]
-            let _ = app
-                .handle()
-                .plugin(tauri_plugin_updater::Builder::new().build());
             // runtime deep_link registration
             #[cfg(any(target_os = "linux", windows))]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 app.deep_link().register_all()?;
             }
-
-            // Desktop OAuth: the PDS authorization page opens in the system
-            // browser, and the callback returns as a `space.roomy:` deep link.
-            // Bring the app forward so the user sees the login complete instead
-            // of having to find the window behind the browser.
             #[cfg(desktop)]
             {
+                let _ = app
+                    .handle()
+                    .plugin(tauri_plugin_updater::Builder::new().build());
+
+                // Desktop OAuth: the PDS authorization page opens in the system
+                // browser, and the callback returns as a `space.roomy:` deep link.
+                // Bring the app forward so the user sees the login complete instead
+                // of having to find the window behind the browser.
                 use tauri_plugin_deep_link::DeepLinkExt;
                 let handle = app.handle().clone();
                 app.deep_link().on_open_url(move |event| {
                     log::info!("deep link received: {:?}", event.urls());
                     bring_to_front(&handle);
                 });
-            }
 
+                // setup tray
+                use tauri::{
+                    menu::{Menu, MenuItem},
+                    tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
+                };
+                pub const TRAY_ID: &str = "main";
+                let toggle =
+                    MenuItem::with_id(app, "toggle", "Toggle", true, None::<&str>).unwrap();
+                let menu = Menu::with_items(
+                    app,
+                    &[
+                        &toggle,
+                        &MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?,
+                        &MenuItem::with_id(app, "restart", "Restart", true, None::<&str>)?,
+                    ],
+                )?;
+                let _ = TrayIconBuilder::with_id(TRAY_ID)
+                    .menu(&menu)
+                    .show_menu_on_left_click(false)
+                    .on_tray_icon_event(|tray, event| match event {
+                        TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: tauri::tray::MouseButtonState::Up,
+                            ..
+                        } => {
+                            let app = tray.app_handle();
+                            if let Some(window) = app.get_webview_window("main") {
+                                if let Ok(visible) = window.is_visible() {
+                                    if visible {
+                                        let _ = window.hide();
+                                    } else {
+                                        let _ = window.show();
+                                        let _ = window.unminimize();
+                                        let _ = window.set_focus();
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    })
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        "toggle" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                if window.is_visible().unwrap() {
+                                    let _ = window.hide();
+                                } else {
+                                    let _ = window.show();
+                                    let _ = window.unminimize();
+                                    let _ = window.set_focus();
+                                }
+                            }
+                        }
+                        "restart" => {
+                            app.request_restart();
+                        }
+                        _ => {
+                            println!("unhandled menu item: {:?}", event.id)
+                        }
+                    })
+                    .icon(app.default_window_icon().unwrap().clone())
+                    .build(app)?;
+            }
             #[cfg(debug_assertions)]
             {
                 app.handle().plugin(
@@ -125,6 +202,15 @@ pub fn run() {
             }
             Ok(())
         })
+        .on_window_event(move |window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                let _ = window.hide();
+                api.prevent_close();
+            }
+            #[cfg(desktop)]
+            tauri::WindowEvent::Focused(true) => push_stream::clear_unseen(window.app_handle()),
+            _ => {}
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -133,9 +219,10 @@ pub fn run() {
 enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Request(#[from] ureq::Error),
 }
 
-// we must manually implement serde::Serialize
 impl serde::Serialize for Error {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

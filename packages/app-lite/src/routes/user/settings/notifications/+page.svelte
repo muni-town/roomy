@@ -17,6 +17,7 @@
     readIosStandaloneCapabilities,
   } from "$lib/push-support";
   import { lastNativeToken, nativePushSupported } from "$lib/native-push";
+  import { desktopPushSupported, lastDesktopEndpoint } from "$lib/desktop-push";
   import { queryClient } from "$lib/client";
   import { toast } from "@foxui/core";
 
@@ -37,7 +38,7 @@
   // A native mobile shell has no `PushManager`/`Notification`, so the web
   // capability probe below would wrongly report "unsupported browser". There
   // the device token is the whole state: present once enabled.
-  const isNative = nativePushSupported();
+  const isNative = nativePushSupported() || desktopPushSupported();
   // Starts true in a native shell so the first paint never flashes the web
   // "unsupported browser" copy while `refreshStatus` resolves.
   let pushSupported = $state(isNative);
@@ -57,7 +58,7 @@
   async function refreshStatus(): Promise<void> {
     if (isNative) {
       pushSupported = true;
-      endpoint = lastNativeToken();
+      endpoint = lastNativeToken() ?? lastDesktopEndpoint();
       return;
     }
     pushSupported =
