@@ -44,13 +44,13 @@ jobs:
         if: matrix.kind == 'android'
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '25'
 
       - uses: nttld/setup-ndk@v1
         if: matrix.kind == 'android'
         id: setup-ndk
         with:
-          ndk-version: r26d
+          ndk-version: r28c
           local-cache: false
 
       - uses: pnpm/action-setup@v6
