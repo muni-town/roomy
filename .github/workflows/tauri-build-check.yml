@@ -1,0 +1,121 @@
+name: 'tauri build check'
+
+on:
+  pull_request:
+    paths:
+      - 'packages/app-lite/**'
+      - '.github/workflows/tauri-build-check.yml'
+    branch:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: macos,   os: macos-latest,   kind: desktop }
+          - { name: linux,   os: ubuntu-latest,  kind: desktop }
+          - { name: windows, os: windows-latest, kind: desktop }
+          - { name: android, os: ubuntu-latest,  kind: android, rust_targets: 'aarch64-linux-android' }
+          - { name: ios,     os: macos-latest,   kind: ios,     rust_targets: 'aarch64-apple-ios,aarch64-apple-ios-sim' }
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install dependencies (linux desktop)
+        if: matrix.kind == 'desktop' && matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: actions/setup-java@v5
+        if: matrix.kind == 'android'
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - uses: nttld/setup-ndk@v1
+        if: matrix.kind == 'android'
+        id: setup-ndk
+        with:
+          ndk-version: r26d
+          local-cache: false
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: 'pnpm'
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: 'packages/app-lite/src-tauri -> target'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build SDK
+        run: pnpm turbo run build-lib
+
+      - name: Set iOS build flag
+        if: matrix.kind == 'ios'
+        shell: bash
+        run: echo "VITE_IOS_BUILD=1" >> "$GITHUB_ENV"
+
+      - name: Build frontend
+        working-directory: packages/app-lite
+        env:
+          VITE_CACHE_STORE: native
+        run: pnpm build
+
+      - name: Verify the subscription page is absent
+        if: matrix.kind == 'ios'
+        run: |
+          BANNED='/user/settings/subscription|polar\.sh|Get Roomy Pro'
+          if grep -rEq "$BANNED" packages/app-lite/build-staging; then
+            echo "::error::Bundle contains the Roomy Pro subscription page:"
+            grep -rEn "$BANNED" packages/app-lite/build-staging | head
+            exit 1
+          fi
+
+      - name: Generate icons
+        working-directory: packages/app-lite
+        run: pnpm dlx @tauri-apps/cli@2.12.0 icon ./src-tauri/icons.manifest.json
+
+      - name: Build desktop
+        if: matrix.kind == 'desktop'
+        working-directory: packages/app-lite
+        run: pnpm dlx @tauri-apps/cli@2.12.0 build --debug --no-bundle
+
+      - name: Build Android
+        if: matrix.kind == 'android'
+        working-directory: packages/app-lite
+        env:
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run:
+          pnpm dlx @tauri-apps/cli@2.12.0 android init --ci
+          ./scripts/copy-android-assets.sh
+          pnpm tauri android build --debug --apk --target aarch64
+
+      - name: Build iOS
+        if: matrix.kind == 'ios'
+        working-directory: packages/app-lite
+        run: |
+          pnpm dlx @tauri-apps/cli@2.12.0 ios init --ci
+          pnpm dlx @tauri-apps/cli@2.12.0 ios build --debug --target aarch64-sim
