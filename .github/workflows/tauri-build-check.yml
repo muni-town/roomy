@@ -108,10 +108,10 @@ jobs:
         working-directory: packages/app-lite
         env:
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-        run:
+        run: |
           pnpm dlx @tauri-apps/cli@2.12.0 android init --ci
           ./scripts/copy-android-assets.sh
-          pnpm tauri android build --debug --apk --target aarch64
+          pnpm dlx @tauri-apps/cli@2.12.0 android build --debug --apk --target aarch64
 
       - name: Build iOS
         if: matrix.kind == 'ios'
