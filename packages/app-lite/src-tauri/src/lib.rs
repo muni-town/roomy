@@ -4,6 +4,7 @@ mod navigation;
 mod push_stream;
 
 use tauri::{Builder, Manager, Url};
+pub const TRAY_ID: &str = "main";
 
 /// Plugin that keeps the webview on the app's own document.
 ///
@@ -129,7 +130,6 @@ pub fn run() {
                     menu::{Menu, MenuItem},
                     tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
                 };
-                pub const TRAY_ID: &str = "main";
                 let toggle =
                     MenuItem::with_id(app, "toggle", "Toggle", true, None::<&str>).unwrap();
                 let menu = Menu::with_items(

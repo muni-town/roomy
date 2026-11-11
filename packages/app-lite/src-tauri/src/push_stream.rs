@@ -18,7 +18,7 @@ use tauri::{image::Image, AppHandle, Emitter, Manager, State};
 // badge generation
 const TRAY_DOT_ICON: &[u8] = include_bytes!("./assets/tray-dot.png");
 
-// #[cfg(windows)]
+#[cfg(windows)]
 const OVERLAY_ICONS: [&[u8]; 10] = [
     include_bytes!("./assets/badge/1.png"),
     include_bytes!("./assets/badge/2.png"),
