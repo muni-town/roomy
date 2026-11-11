@@ -111,6 +111,25 @@ jobs:
         run: |
           pnpm dlx @tauri-apps/cli@2.12.0 android init --ci
           ./scripts/copy-android-assets.sh
+          # write placeholder google-services.json
+          ID="$(jq -r .identifier src-tauri/tauri.conf.json)"
+          cat > src-tauri/gen/android/app/google-services.json <<EOF
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "ci-placeholder",
+              "storage_bucket": "ci-placeholder.appspot.com"
+            },
+            "client": [{
+              "client_info": {
+                "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+                "android_client_info": { "package_name": "$ID" }
+              },
+              "api_key": [{ "current_key": "placeholder" }]
+            }],
+            "configuration_version": "1"
+          }
+          EOF
           pnpm dlx @tauri-apps/cli@2.12.0 android build --debug --apk --target aarch64
 
       - name: Build iOS
