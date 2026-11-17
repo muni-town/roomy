@@ -141,6 +141,40 @@ impl RecordChange {
     pub fn kind(&self) -> RecordKind {
         self.base().kind
     }
+
+    /// The op the change is.
+    pub fn op(&self) -> ChangeOp {
+        match self {
+            RecordChange::Create { .. } => ChangeOp::Create,
+            RecordChange::Update { .. } => ChangeOp::Update,
+            RecordChange::Delete { .. } => ChangeOp::Delete,
+        }
+    }
+}
+
+/// The three ops the feed's `op` column names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChangeOp {
+    Create,
+    Update,
+    Delete,
+}
+
+impl ChangeOp {
+    /// The op's wire name, as the feed's `op` column carries it.
+    pub fn name(&self) -> &'static str {
+        match self {
+            ChangeOp::Create => "create",
+            ChangeOp::Update => "update",
+            ChangeOp::Delete => "delete",
+        }
+    }
+}
+
+impl std::fmt::Display for ChangeOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
 }
 
 /// One row of the feed, as the table holds it.

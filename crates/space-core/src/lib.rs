@@ -27,7 +27,9 @@ pub mod links;
 pub mod rules;
 pub mod time;
 
-pub use change::{decode_row, ChangeBase, DecodeError, FeedRow, RecordChange, RecordKind};
+pub use change::{
+    decode_row, ChangeBase, ChangeOp, DecodeError, FeedRow, RecordChange, RecordKind,
+};
 pub use context::{PlanMode, RuleContext};
 pub use effects::{DerivedStep, Effect, SqlEffect, Target, Value};
 pub use ids::{Collection, OrderStamp, Rkey, SpaceDid};

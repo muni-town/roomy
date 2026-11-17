@@ -23,7 +23,8 @@
 //!  * **A failing space waits, and says what failed.** A step that returns an
 //!    error retries under an exponential backoff, so one space that cannot make
 //!    progress costs neither a core nor a log flood; the warning names the
-//!    space, the cursor it is stuck at, and the error.
+//!    space, the cursor it is stuck at, and the error — which, for a statement
+//!    the database rejected, carries the change and the statement itself.
 //!
 //! The supervisor binds no socket and reads no environment; the binary that
 //! hosts it does both.

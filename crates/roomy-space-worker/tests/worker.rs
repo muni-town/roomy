@@ -267,7 +267,13 @@ fn a_batch_is_applied_with_its_cursor_or_not_at_all() {
         space_core::effects::Effect::space("insert into no_such_table (x) values (1)", Vec::new());
     let planned = vec![space_db::PlannedEntry {
         idx: rows[0].idx,
-        effects: vec![broken],
+        changes: vec![space_db::PlannedChange {
+            ord: rows[0].ord,
+            kind: space_core::RecordKind::Message,
+            op: space_core::ChangeOp::Create,
+            rkey: rows[0].rkey.clone(),
+            effects: vec![broken],
+        }],
     }];
     assert!(db
         .begin_batch(&planned, (rows[0].idx, rows[0].ord), 1)

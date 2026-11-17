@@ -23,13 +23,17 @@ pub use digest::{
     diff_snapshots, digest_of, global_tables, snapshot_db, snapshot_tables, worker_snapshot,
     TableDivergence, TableSnapshot,
 };
-pub use plan::{apply_plan, plan_batch, EntryChanges, PlannedEntry};
+pub use plan::{
+    apply_plan, plan_batch, EntryChange, EntryChanges, LabelledStatement, PlannedChange,
+    PlannedEntry,
+};
 pub use to_sql as value_to_sql;
 
 use std::path::Path;
 
 use rusqlite::{Connection, Transaction};
-use space_core::effects::{DerivedStep, Effect, SqlEffect, Target, Value};
+use space_core::change::{ChangeOp, RecordKind};
+use space_core::effects::{DerivedStep, SqlEffect, Target, Value};
 use space_core::ids::SpaceDid;
 use space_core::RuleError;
 
@@ -41,6 +45,11 @@ pub const SPACE_SCHEMA: &str = include_str!("../../../packages/appserver/src/db/
 pub enum DbError {
     #[error("{0}")]
     Sqlite(#[from] rusqlite::Error),
+    /// A statement the database rejected, with the change that emitted it and
+    /// the statement itself. Boxed: the context is display data, and every
+    /// other variant stays small.
+    #[error("{0}")]
+    Statement(Box<StatementError>),
     #[error("{0}")]
     Derived(#[from] derived::DerivedError),
     #[error("step produced a result the database rejected: {0}")]
@@ -104,31 +113,20 @@ impl SpaceDb {
         &mut self.conn
     }
 
-    /// Apply one change's effects.
-    ///
-    /// The statements run in the order they were planned; the derived steps run
-    /// after the caller's batch of statements, in the same order (the caller
-    /// decides where the boundary is — see `apply_statements`). Global-targeted
-    /// statements, and any a derived step produced, are returned rather than
-    /// applied.
-    pub fn apply_effects(&mut self, effects: &[Effect]) -> Result<Vec<SqlEffect>, DbError> {
-        let (statements, steps) = split(effects);
-        let mut globals = self.apply_statements(&statements)?;
-        globals.extend(self.apply_steps(&steps)?);
-        Ok(globals)
-    }
-
     /// Apply the space-targeted statements and return the global ones.
-    pub fn apply_statements(&mut self, effects: &[&SqlEffect]) -> Result<Vec<SqlEffect>, DbError> {
+    ///
+    /// Each statement carries the change that emitted it, so one the database
+    /// rejects names both the change and the statement.
+    pub fn apply_statements(
+        &mut self,
+        statements: &[LabelledStatement<'_>],
+    ) -> Result<Vec<SqlEffect>, DbError> {
         let mut globals: Vec<SqlEffect> = Vec::new();
-        for effect in effects {
-            match effect.target {
-                Target::Global => globals.push((*effect).clone()),
+        for labelled in statements {
+            match labelled.statement.target {
+                Target::Global => globals.push(labelled.statement.clone()),
                 Target::Space => {
-                    let mut statement = self.conn.prepare(effect.sql)?;
-                    let params: Vec<rusqlite::types::Value> =
-                        effect.params.iter().map(to_sql).collect();
-                    statement.execute(rusqlite::params_from_iter(params))?;
+                    execute_statement(&self.conn, labelled.change, labelled.statement)?;
                 }
             }
         }
@@ -166,15 +164,11 @@ impl SpaceDb {
         let transaction = self.conn.transaction()?;
         let mut globals: Vec<SqlEffect> = Vec::new();
 
-        for statement in statements {
-            match statement.target {
-                Target::Global => globals.push(statement.clone()),
+        for labelled in statements {
+            match labelled.statement.target {
+                Target::Global => globals.push(labelled.statement.clone()),
                 Target::Space => {
-                    let params: Vec<rusqlite::types::Value> =
-                        statement.params.iter().map(to_sql).collect();
-                    transaction
-                        .prepare(statement.sql)?
-                        .execute(rusqlite::params_from_iter(params))?;
+                    execute_statement(&transaction, labelled.change, labelled.statement)?;
                 }
             }
         }
@@ -290,18 +284,167 @@ impl PendingBatch<'_> {
     }
 }
 
-/// Split effects into statements and steps, keeping each list's order.
-#[must_use]
-pub fn split(effects: &[Effect]) -> (Vec<&SqlEffect>, Vec<&DerivedStep>) {
-    let mut statements: Vec<&SqlEffect> = Vec::new();
-    let mut steps: Vec<&DerivedStep> = Vec::new();
-    for effect in effects {
-        match effect {
-            Effect::Sql(statement) => statements.push(statement),
-            Effect::Step(step) => steps.push(step),
+/// Run one statement, naming the change and the statement if it fails.
+///
+/// SQLite's own text — `FOREIGN KEY constraint failed` — names neither the
+/// change that produced the statement nor the values that were bound to it, so
+/// a failure carries both: the change's position in the log, and the SQL with
+/// its parameters rendered.
+fn execute_statement(
+    conn: &Connection,
+    change: ChangeLabel<'_>,
+    statement: &SqlEffect,
+) -> Result<(), DbError> {
+    let run = || -> rusqlite::Result<usize> {
+        let params: Vec<rusqlite::types::Value> = statement.params.iter().map(to_sql).collect();
+        conn.prepare(statement.sql)?
+            .execute(rusqlite::params_from_iter(params))
+    };
+    run().map(|_| ()).map_err(|source| {
+        DbError::Statement(Box::new(StatementError {
+            context: StatementContext::new(change, statement),
+            source,
+        }))
+    })
+}
+
+/// The longest run of a text parameter a failure renders. One of these values
+/// can be a whole message body.
+const MAX_RENDERED_CHARS: usize = 200;
+
+/// The most parameters a failure renders.
+const MAX_RENDERED_VALUES: usize = 5;
+
+/// The change a statement came from, as a failure names it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChangeRef {
+    /// The log entry the change came from.
+    pub idx: i64,
+    /// Emission order within that entry.
+    pub ord: i64,
+    pub kind: RecordKind,
+    pub op: ChangeOp,
+    pub rkey: String,
+}
+
+impl std::fmt::Display for ChangeRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "change idx={} ord={} kind={} op={} rkey={}",
+            self.idx,
+            self.ord,
+            self.kind.name(),
+            self.op,
+            self.rkey
+        )
+    }
+}
+
+/// The change a statement came from, borrowed from the plan it is part of.
+#[derive(Debug, Clone, Copy)]
+pub struct ChangeLabel<'a> {
+    pub idx: i64,
+    pub ord: i64,
+    pub kind: RecordKind,
+    pub op: ChangeOp,
+    pub rkey: &'a str,
+}
+
+impl From<ChangeLabel<'_>> for ChangeRef {
+    fn from(label: ChangeLabel<'_>) -> Self {
+        Self {
+            idx: label.idx,
+            ord: label.ord,
+            kind: label.kind,
+            op: label.op,
+            rkey: label.rkey.to_string(),
         }
     }
-    (statements, steps)
+}
+
+/// The statement a database rejected, and the change it came from.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StatementContext {
+    /// The change whose effects included the statement.
+    pub change: ChangeRef,
+    /// The database the statement targets.
+    pub target: Target,
+    /// The SQL, whitespace collapsed so the failure stays one log line.
+    pub sql: String,
+    /// The bound parameters, rendered: the first few values, each text value
+    /// cut short, a blob as its size alone.
+    pub params: String,
+}
+
+impl StatementContext {
+    fn new(change: ChangeLabel<'_>, statement: &SqlEffect) -> Self {
+        Self {
+            change: ChangeRef::from(change),
+            target: statement.target,
+            sql: statement
+                .sql
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" "),
+            params: render_params(&statement.params),
+        }
+    }
+}
+
+impl std::fmt::Display for StatementContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}: {} statement failed: {} params {}",
+            self.change, self.target, self.sql, self.params
+        )
+    }
+}
+
+/// A statement the database rejected.
+#[derive(Debug, thiserror::Error)]
+#[error("{context}: {source}")]
+pub struct StatementError {
+    pub context: StatementContext,
+    #[source]
+    pub source: rusqlite::Error,
+}
+
+/// Render bound parameters for a failure line, bounded in length.
+///
+/// A blob renders as its size alone: the bytes are never the thing a reader
+/// needs, and one of them can be megabytes.
+fn render_params(params: &[Value]) -> String {
+    let mut rendered: Vec<String> = params
+        .iter()
+        .take(MAX_RENDERED_VALUES)
+        .map(render_param)
+        .collect();
+    if params.len() > MAX_RENDERED_VALUES {
+        rendered.push(format!("+{} more", params.len() - MAX_RENDERED_VALUES));
+    }
+    format!("[{}]", rendered.join(", "))
+}
+
+fn render_param(param: &Value) -> String {
+    match param {
+        Value::Null => "null".to_string(),
+        Value::Integer(value) => value.to_string(),
+        Value::Real(value) => value.to_string(),
+        Value::Text(text) => {
+            let mut chars = text.chars();
+            let head: String = chars.by_ref().take(MAX_RENDERED_CHARS).collect();
+            let truncated = chars.next().is_some();
+            format!(
+                "text({}B) \"{}{}\"",
+                text.len(),
+                head.escape_debug(),
+                if truncated { "…" } else { "" }
+            )
+        }
+        Value::Blob(bytes) => format!("blob({}B)", bytes.len()),
+    }
 }
 
 /// A typed parameter as SQLite takes it.

@@ -19,6 +19,22 @@ pub enum Target {
     Global,
 }
 
+impl Target {
+    /// The database the statement targets, as a failure names it.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Target::Space => "space",
+            Target::Global => "global",
+        }
+    }
+}
+
+impl std::fmt::Display for Target {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
 /// A statement parameter, in the shapes SQLite takes.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {

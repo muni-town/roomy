@@ -16,21 +16,39 @@ use std::collections::HashMap;
 use roomy_events::Did;
 use rusqlite::Connection;
 use space_core::change::{
-    decode_row, DecodeError, FeedRow, RecordBody, RecordChange, RecordKind, RecordPatch,
+    decode_row, ChangeOp, DecodeError, FeedRow, RecordBody, RecordChange, RecordKind, RecordPatch,
 };
 use space_core::effects::{DerivedStep, SqlEffect};
 use space_core::ids::SpaceDid;
 use space_core::time;
 use space_core::{Effect, PlanMode, RuleContext};
 
-use crate::{DbError, SpaceDb};
+use crate::{ChangeLabel, DbError, SpaceDb};
 
-/// One entry's effects, in application order.
+/// One entry's changes, each with the effects it produced.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlannedEntry {
     /// The log entry the changes came from. Changes that share an `idx` are
     /// planned together, because they came from one entry and share its actor.
     pub idx: i64,
+    pub changes: Vec<PlannedChange>,
+}
+
+impl PlannedEntry {
+    /// Every effect the entry's changes produced, in application order.
+    pub fn effects(&self) -> impl Iterator<Item = &Effect> {
+        self.changes.iter().flat_map(|change| &change.effects)
+    }
+}
+
+/// One change's effects, with the identity a failure reports it by.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlannedChange {
+    /// Emission order within the entry, as the feed recorded it.
+    pub ord: i64,
+    pub kind: RecordKind,
+    pub op: ChangeOp,
+    pub rkey: String,
     pub effects: Vec<Effect>,
 }
 
@@ -39,10 +57,17 @@ pub struct PlannedEntry {
 pub struct EntryChanges {
     pub idx: i64,
     /// Emission order within the entry; the changes are applied in it.
-    pub changes: Vec<RecordChange>,
+    pub changes: Vec<EntryChange>,
     pub actor: Did,
     pub event_id: String,
     pub order_stamp: String,
+}
+
+/// One change in an entry, at the position the feed emitted it.
+#[derive(Debug, Clone)]
+pub struct EntryChange {
+    pub ord: i64,
+    pub change: RecordChange,
 }
 
 /// A feed row that does not decode into a change.
@@ -71,10 +96,16 @@ pub fn group_entries(rows: &[FeedRow]) -> Result<Vec<EntryChanges>, GroupError> 
             source: DecodeError::Did,
         })?;
         match entries.last_mut() {
-            Some(entry) if entry.idx == row.idx => entry.changes.push(change),
+            Some(entry) if entry.idx == row.idx => entry.changes.push(EntryChange {
+                ord: row.ord,
+                change,
+            }),
             _ => entries.push(EntryChanges {
                 idx: row.idx,
-                changes: vec![change],
+                changes: vec![EntryChange {
+                    ord: row.ord,
+                    change,
+                }],
                 actor,
                 event_id: row.event_id.clone(),
                 order_stamp: row.order_stamp.clone(),
@@ -101,8 +132,9 @@ pub fn plan_batch(
 
     let mut planned: Vec<PlannedEntry> = Vec::new();
     for entry in entries {
-        let mut effects: Vec<Effect> = Vec::new();
-        for change in &entry.changes {
+        let mut planned_changes: Vec<PlannedChange> = Vec::new();
+        for entry_change in &entry.changes {
+            let change = &entry_change.change;
             let key = change.base().rkey.as_str().to_string();
             // The change's instant comes from its entry's ordering stamp, so a
             // replay stamps the same values the live path did.
@@ -167,11 +199,17 @@ pub fn plan_batch(
                 _ => {}
             }
 
-            effects.extend(space_core::plan(change, &ctx)?);
+            planned_changes.push(PlannedChange {
+                ord: entry_change.ord,
+                kind: change.kind(),
+                op: change.op(),
+                rkey: change.base().rkey.as_str().to_string(),
+                effects: space_core::plan(change, &ctx)?,
+            });
         }
         planned.push(PlannedEntry {
             idx: entry.idx,
-            effects,
+            changes: planned_changes,
         });
     }
     Ok(planned)
@@ -180,7 +218,8 @@ pub fn plan_batch(
 fn rooms_needed(entries: &[EntryChanges]) -> Vec<String> {
     let mut ids: Vec<String> = Vec::new();
     for entry in entries {
-        for change in &entry.changes {
+        for entry_change in &entry.changes {
+            let change = &entry_change.change;
             let needed = match change {
                 RecordChange::Delete { base } => base.kind == RecordKind::Message,
                 RecordChange::Update {
@@ -203,7 +242,8 @@ fn rooms_needed(entries: &[EntryChanges]) -> Vec<String> {
 fn parents_needed(entries: &[EntryChanges]) -> Vec<String> {
     let mut ids: Vec<String> = Vec::new();
     for entry in entries {
-        for change in &entry.changes {
+        for entry_change in &entry.changes {
+            let change = &entry_change.change;
             if let RecordChange::Update {
                 patch: RecordPatch::Room(patch),
                 ..
@@ -224,7 +264,8 @@ fn parents_needed(entries: &[EntryChanges]) -> Vec<String> {
 fn calls_needed(entries: &[EntryChanges]) -> Vec<String> {
     let mut ids: Vec<String> = Vec::new();
     for entry in entries {
-        for change in &entry.changes {
+        for entry_change in &entry.changes {
+            let change = &entry_change.change;
             let needed = change.kind() == RecordKind::VoiceCall
                 && !matches!(change, RecordChange::Create { .. });
             if needed {
@@ -294,17 +335,42 @@ fn read_call_rooms(conn: &Connection, ids: &[String]) -> Result<HashMap<String, 
     Ok(calls)
 }
 
+/// A statement and the change that emitted it.
+#[derive(Debug, Clone, Copy)]
+pub struct LabelledStatement<'a> {
+    pub change: ChangeLabel<'a>,
+    pub statement: &'a SqlEffect,
+}
+
 /// Flatten a planned batch: every entry's statements first, then every entry's
 /// derived steps, which is the order the TypeScript materialiser applies a
 /// chunk in.
+///
+/// Each statement keeps the change that emitted it, so a statement the database
+/// rejects can name the change it came from.
 #[must_use]
-pub fn flatten(planned: &[PlannedEntry]) -> (Vec<&SqlEffect>, Vec<&DerivedStep>) {
-    let mut statements: Vec<&SqlEffect> = Vec::new();
+pub fn flatten(planned: &[PlannedEntry]) -> (Vec<LabelledStatement<'_>>, Vec<&DerivedStep>) {
+    let mut statements: Vec<LabelledStatement<'_>> = Vec::new();
     let mut steps: Vec<&DerivedStep> = Vec::new();
     for entry in planned {
-        let (entry_statements, entry_steps) = crate::split(&entry.effects);
-        statements.extend(entry_statements);
-        steps.extend(entry_steps);
+        for change in &entry.changes {
+            let label = ChangeLabel {
+                idx: entry.idx,
+                ord: change.ord,
+                kind: change.kind,
+                op: change.op,
+                rkey: &change.rkey,
+            };
+            for effect in &change.effects {
+                match effect {
+                    Effect::Sql(statement) => statements.push(LabelledStatement {
+                        change: label,
+                        statement,
+                    }),
+                    Effect::Step(step) => steps.push(step),
+                }
+            }
+        }
     }
     (statements, steps)
 }

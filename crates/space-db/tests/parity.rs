@@ -16,10 +16,10 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
 use serde::Deserialize;
-use space_core::change::{decode_row, FeedRow, RecordChange};
+use space_core::change::{decode_row, FeedRow};
 use space_core::ids::SpaceDid;
 use space_core::time;
-use space_db::plan::{apply_plan, plan_batch, EntryChanges};
+use space_db::plan::{apply_plan, plan_batch, EntryChange, EntryChanges};
 use space_db::{digest_of, snapshot_db, snapshot_tables, worker_snapshot, SpaceDb};
 
 const GLOBAL_SCHEMA: &str = include_str!("../../../packages/appserver/src/db/schema-global.sql");
@@ -101,11 +101,18 @@ fn every_fixture_projects_to_the_typescript_digests() {
         global.execute_batch(GLOBAL_SCHEMA).expect("global schema");
 
         // Group the rows into entries, in the order the worker reads them.
-        let mut entries: BTreeMap<i64, Vec<(usize, RecordChange)>> = BTreeMap::new();
+        let mut entries: BTreeMap<i64, Vec<(usize, EntryChange)>> = BTreeMap::new();
         for (position, row) in fixture.changes.iter().enumerate() {
             let change = decode_row(row)
                 .unwrap_or_else(|err| panic!("{name}: row {position} does not decode: {err}"));
-            entries.entry(row.idx).or_default().push((position, change));
+            let entry_change = EntryChange {
+                ord: row.ord,
+                change,
+            };
+            entries
+                .entry(row.idx)
+                .or_default()
+                .push((position, entry_change));
         }
 
         let batch: Vec<EntryChanges> = entries
@@ -136,7 +143,7 @@ fn every_fixture_projects_to_the_typescript_digests() {
         // The global statements the rules produced were returned, not applied:
         // the sink applies them, and this test is that sink.
         for entry in &planned {
-            for effect in &entry.effects {
+            for effect in entry.effects() {
                 let space_core::Effect::Sql(statement) = effect else {
                     continue;
                 };
