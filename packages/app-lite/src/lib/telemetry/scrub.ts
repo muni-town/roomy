@@ -19,6 +19,16 @@
  * query string, which can carry a signed capability that outlives the log
  * line, are dropped.
  *
+ * Spans get one exception to that, and only one: the XRPC method they called
+ * ({@link replaceUrls}). A span's `url.full` exists to say which endpoint a
+ * request went to; with its path removed every fetch span collapses to the
+ * origin, so a slow one or a 401 cannot be attributed to a method. `/xrpc/<nsid>`
+ * is a public schema identifier — the name of a lexicon entry, shipped in every
+ * client bundle — so it identifies the call, never the person making it.
+ * Everything else stays dropped: the query string (`getServiceAuth`'s
+ * `aud`/`exp`/`lxm`, a sync ticket), the fragment, and any other path, which is
+ * where user data lives — client routes carry space DIDs, room ids and handles.
+ *
  * Identity is the same argument. A DID is a durable, cross-service identifier,
  * so telemetry names the user by a salted hash of it ({@link pseudonymiseDid})
  * rather than the identifier itself; the mapping lives here, at the boundary,
@@ -28,19 +38,44 @@
 /** Absolute http(s)/ws(s) URLs, stopping at whitespace and quoting delimiters. */
 const URL_PATTERN = /(?:https?|wss?):\/\/[^\s"'`<>()[\]{}]+/gi;
 
+/**
+ * One NSID segment: letters, digits and hyphens, starting and ending with a
+ * letter or digit.
+ */
+const NSID = String.raw`[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?`;
+
+/**
+ * The one path a span's URL may keep: `/xrpc/<nsid>` with nothing before or
+ * after it, the NSID being three or more segments. Anchored at both ends and
+ * built from `NSID`, so a further path segment (`/xrpc/x.y.z/room`), a traversal
+ * (`/xrpc/..`) and an escaped separator (`%2F`, since `%` is outside the class)
+ * all fail to match and the whole path is dropped.
+ */
+const XRPC_METHOD_PATH = new RegExp(`^/xrpc/(?:${NSID}\\.){2,}${NSID}$`);
+
 /** Sentence punctuation that ends a URL in prose rather than belonging to it. */
 const TRAILING_PUNCTUATION = /[.,;:!?]+$/;
 
 /**
- * Replace every absolute URL in `text` with the host it points at, keeping any
- * punctuation that terminated the URL in the surrounding prose.
+ * Replace every absolute URL in `text`, keeping any punctuation that terminated
+ * the URL in the surrounding prose.
+ *
+ * `span` selects the surface's rule. A span is read by a machine and its URL is
+ * the only record of which endpoint a request hit, so it keeps its `origin`
+ * plus the XRPC method when the path is one. Everywhere else the string is read
+ * by a person, for whom the host answers the question a URL in a log line gets
+ * asked — which server was involved — so scheme, path and query all go.
  */
-export function redactUrls(text: string): string {
+function replaceUrls(text: string, span: boolean): string {
   return text.replace(URL_PATTERN, (match) => {
     const punctuation = TRAILING_PUNCTUATION.exec(match)?.[0] ?? "";
     const url = punctuation ? match.slice(0, -punctuation.length) : match;
     try {
-      return new URL(url).host + punctuation;
+      const parsed = new URL(url);
+      const kept = span
+        ? parsed.origin + (XRPC_METHOD_PATH.test(parsed.pathname) ? parsed.pathname : "")
+        : parsed.host;
+      return kept + punctuation;
     } catch {
       // Not parseable as a URL (`https://`, `https:///x`): the text after the
       // scheme is still URL-shaped, so it cannot be kept either.
@@ -50,12 +85,19 @@ export function redactUrls(text: string): string {
 }
 
 /**
+ * Replace every absolute URL in `text` with the host it points at.
+ */
+export function redactUrls(text: string): string {
+  return replaceUrls(text, false);
+}
+
+/**
  * Scrub every string reachable from `value`, rebuilding arrays and plain
  * objects and passing anything else (Date, Error, class instances) through
- * untouched.
+ * untouched. `span` selects the URL rule ({@link replaceUrls}).
  */
-function scrubValue(value: unknown, seen = new WeakMap<object, unknown>()): unknown {
-  if (typeof value === "string") return redactUrls(value);
+function scrubValue(value: unknown, span: boolean, seen = new WeakMap<object, unknown>()): unknown {
+  if (typeof value === "string") return replaceUrls(value, span);
   if (typeof value !== "object" || value === null) return value;
 
   const cached = seen.get(value);
@@ -64,7 +106,7 @@ function scrubValue(value: unknown, seen = new WeakMap<object, unknown>()): unkn
   if (Array.isArray(value)) {
     const out: unknown[] = [];
     seen.set(value, out);
-    for (const entry of value) out.push(scrubValue(entry, seen));
+    for (const entry of value) out.push(scrubValue(entry, span, seen));
     return out;
   }
 
@@ -74,7 +116,7 @@ function scrubValue(value: unknown, seen = new WeakMap<object, unknown>()): unkn
 
   const out: Record<string, unknown> = {};
   seen.set(value, out);
-  for (const [key, entry] of Object.entries(value)) out[key] = scrubValue(entry, seen);
+  for (const [key, entry] of Object.entries(value)) out[key] = scrubValue(entry, span, seen);
   return out;
 }
 
@@ -117,6 +159,10 @@ function exceptionText(payload: unknown): string | undefined {
  * Declared structurally and generically so this module stays free of the
  * telemetry SDK: only string leaves are rewritten, so each field keeps the
  * type it arrived with.
+ *
+ * A trace item is scrubbed with the span rule ({@link replaceUrls}): its
+ * payload is the OTLP export of the spans, whose `url.full` attributes are what
+ * names the endpoint a fetch hit.
  */
 export function scrubTelemetryItem<T extends { type: string; payload: unknown }>(
   item: T,
@@ -125,7 +171,7 @@ export function scrubTelemetryItem<T extends { type: string; payload: unknown }>
     const text = exceptionText(item.payload);
     if (text !== undefined && Object.hasOwn(LAYOUT_WARNING_MESSAGES, text)) return null;
   }
-  return { ...item, payload: scrubValue(item.payload) as T["payload"] };
+  return { ...item, payload: scrubValue(item.payload, item.type === "trace") as T["payload"] };
 }
 
 /**

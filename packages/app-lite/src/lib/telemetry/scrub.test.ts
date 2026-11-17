@@ -63,6 +63,137 @@ describe("redactUrls", () => {
   });
 });
 
+/**
+ * A trace item shaped as the Faro trace exporter builds it: OTLP resource spans
+ * whose span attributes are what `beforeSend` receives after the fetch
+ * instrumentation has stamped the request URL on.
+ */
+function fetchTraceItem(
+  url: string,
+  extra: Array<{ key: string; value: { stringValue: string } }> = [],
+) {
+  return {
+    type: "trace",
+    payload: {
+      resourceSpans: [
+        {
+          scopeSpans: [
+            {
+              spans: [
+                {
+                  name: "GET",
+                  attributes: [
+                    { key: "http.request.method", value: { stringValue: "GET" } },
+                    { key: "url.full", value: { stringValue: url } },
+                    ...extra,
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    meta: {},
+  };
+}
+
+/** The `url.full` a scrubbed fetch span carries. */
+function scrubbedUrlFull(url: string): string | undefined {
+  const item = scrubTelemetryItem(fetchTraceItem(url));
+  assert.ok(item, "a span is not dropped");
+  const [span] = item.payload.resourceSpans[0]?.scopeSpans[0]?.spans ?? [];
+  const attribute = span?.attributes.find((entry) => entry.key === "url.full");
+  return attribute?.value.stringValue;
+}
+
+/**
+ * A span's URL is the only record of which endpoint a request hit, so it keeps
+ * the XRPC method it called. `url.full` otherwise carries the same leak the
+ * prose rule closes: the query string holds a sync ticket or a signed
+ * `getServiceAuth` capability, and a client route's path holds the space DID,
+ * room id or handle the user was looking at.
+ */
+describe("span URLs", () => {
+  test("keeps the XRPC method and drops the query string and fragment", () => {
+    assert.equal(
+      scrubbedUrlFull(
+        "https://api.roomy.space/xrpc/space.roomy.room.getMessages" +
+          "?spaceId=did%3Aplc%3Aabc&room=01KZBRQMEP2FTE079YRVDFKGTA&limit=50#newest",
+      ),
+      "https://api.roomy.space/xrpc/space.roomy.room.getMessages",
+    );
+  });
+
+  test("keeps the method of a sync subscription without its ticket", () => {
+    assert.equal(
+      scrubbedUrlFull("wss://api.roomy.space/xrpc/space.roomy.sync.subscribe?ticket=secret-ticket"),
+      "wss://api.roomy.space/xrpc/space.roomy.sync.subscribe",
+    );
+  });
+
+  test("reduces a client route carrying a space DID to the origin", () => {
+    assert.equal(
+      scrubbedUrlFull(
+        "https://roomy.space/space/did:plc:drzgt2m6lmcel62gfbzjeap3/room/01KZBRQMEP2FTE079YRVDFKGTA",
+      ),
+      "https://roomy.space",
+    );
+  });
+
+  test("reduces a non-xrpc path to the origin", () => {
+    assert.equal(
+      scrubbedUrlFull("https://api.roomy.space/admin/api-clients/42?scopes=everything"),
+      "https://api.roomy.space",
+    );
+  });
+
+  test("keeps nothing of a path that is not exactly one XRPC method", () => {
+    for (const url of [
+      // Two segments is not an NSID.
+      "https://api.roomy.space/xrpc/space.roomy",
+      // A method followed by a path segment.
+      "https://api.roomy.space/xrpc/space.roomy.room.getMessages/did:plc:abc",
+      // An escaped separator is not a separator, but not part of a method either.
+      "https://api.roomy.space/xrpc/space.roomy.room.getMessages%2Fdid:plc:abc",
+    ]) {
+      assert.equal(scrubbedUrlFull(url), "https://api.roomy.space", url);
+    }
+  });
+
+  test("scrubs every string in the payload and leaves the rest of the span alone", () => {
+    const item = scrubTelemetryItem(
+      fetchTraceItem("https://api.roomy.space/xrpc/space.roomy.room.getMessages?room=01KZBRQ", [
+        { key: "http.response.header.x-ticket", value: { stringValue: "wss://relay.roomy.space/x?ticket=t" } },
+      ]),
+    );
+
+    assert.ok(item);
+    const [span] = item.payload.resourceSpans[0]?.scopeSpans[0]?.spans ?? [];
+    assert.equal(span?.name, "GET", "the span name is not a URL and is kept");
+    assert.deepEqual(
+      span?.attributes.map((entry) => entry.value.stringValue),
+      [
+        "GET",
+        "https://api.roomy.space/xrpc/space.roomy.room.getMessages",
+        // A URL in any other attribute is not an XRPC call: origin only, and
+        // the ticket in its query string is gone.
+        "wss://relay.roomy.space",
+      ],
+    );
+  });
+
+  test("leaves a log line's XRPC URL without its method", () => {
+    const item = scrubTelemetryItem({
+      type: "log",
+      payload: { message: `retrying https://api.roomy.space/xrpc/space.roomy.room.getMessages?limit=50` },
+    });
+
+    assert.ok(item);
+    assert.equal(item.payload.message, "retrying api.roomy.space");
+  });
+});
+
 describe("scrubTelemetryItem", () => {
   test("scrubs a console-captured log line", () => {
     const item = scrubTelemetryItem({
