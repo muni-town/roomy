@@ -71,36 +71,118 @@ export interface RecordChangeRow {
 }
 
 /**
+ * Why a log entry contributes no rows to the feed.
+ *
+ *  - `no-record-kind` — the event type declares no record at all
+ *    (`setHandleProvider`, `editPage`, `reorderMessage`, `markRead`), so the
+ *    feed is complete without it.
+ *  - `unconverted-kind` — the type declares a kind, but not every kind it
+ *    declares is converted, so its changes stay on the event path.
+ *  - `adapter-threw` — the adapter could not describe the entry.
+ *
+ * The first is not a gap; the other two are, because the type does declare a
+ * kind the feed carries and no row holds it.
+ */
+export type FeedSkipReason =
+  | "no-record-kind"
+  | "unconverted-kind"
+  | "adapter-threw";
+
+/** What one entry contributes, or why it contributes nothing. */
+export type FeedOutcome =
+  | {
+      readonly ok: true;
+      /** The kinds the event type declares, in emission order. */
+      readonly declared: readonly RecordKind[];
+      readonly changes: RecordChange[];
+    }
+  | {
+      readonly ok: false;
+      readonly declared: readonly RecordKind[];
+      readonly reason: FeedSkipReason;
+      /** The kinds that are not converted; empty unless `unconverted-kind`. */
+      readonly kinds: readonly RecordKind[];
+      /** The adapter's message, when it threw. */
+      readonly detail?: string;
+    };
+
+/**
+ * What one log entry contributes to the feed, and why when it contributes
+ * nothing.
+ *
+ * The classification is the write path's own decision, reported rather than
+ * swallowed: `feedChanges` drops an entry it cannot carry, and an audit cannot
+ * tell a dropped entry from one that never had a record without this answer.
+ */
+export function describeFeedChanges(
+  entry: LoggedEvent,
+  streamId: StreamDid,
+): FeedOutcome {
+  const declared: readonly RecordKind[] =
+    RECORD_KINDS_FOR_EVENT[entry.event.$type] ?? [];
+  if (declared.length === 0) {
+    return { ok: false, declared, reason: "no-record-kind", kinds: [] };
+  }
+  const unconverted = declared.filter((kind) => !CONVERTED_KINDS.has(kind));
+  if (unconverted.length > 0) {
+    return {
+      ok: false,
+      declared,
+      reason: "unconverted-kind",
+      kinds: unconverted,
+    };
+  }
+
+  let changes: RecordChange[];
+  try {
+    changes = toRecordChanges(entry, streamId);
+  } catch (err) {
+    return {
+      ok: false,
+      declared,
+      reason: "adapter-threw",
+      kinds: [],
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  const emitted = changes.filter((change) => !CONVERTED_KINDS.has(change.kind));
+  if (emitted.length > 0) {
+    // The table and the adapter disagree about what this type emits. Nothing
+    // writes a record the worker would not apply, so the entry is dropped and
+    // the disagreement is reported as the kinds that caused it.
+    return {
+      ok: false,
+      declared,
+      reason: "unconverted-kind",
+      kinds: [...new Set(emitted.map((change) => change.kind))],
+    };
+  }
+  return { ok: true, declared, changes };
+}
+
+/**
  * The changes one log entry contributes to the feed.
  *
  * An event whose kinds are all converted carries its changes; an event that
  * emits no record, or that the adapter cannot describe, contributes nothing.
  * A malformed row is skipped rather than thrown: the feed is written on the
  * write path, and one unreadable entry must not fail the append that produced
- * it — the backfill script reports the same entry when it is re-run.
+ * it — the audit (`scripts/backfill-record-changes.ts --verify`) reports the
+ * gap it leaves.
  */
 export function feedChanges(
   entry: LoggedEvent,
   streamId: StreamDid,
 ): RecordChange[] {
-  const declared = RECORD_KINDS_FOR_EVENT[entry.event.$type];
-  if (declared === undefined || declared.length === 0) return [];
-  if (!declared.every((kind) => CONVERTED_KINDS.has(kind))) return [];
-
-  let changes: RecordChange[];
-  try {
-    changes = toRecordChanges(entry, streamId);
-  } catch (err) {
+  const outcome = describeFeedChanges(entry, streamId);
+  if (outcome.ok) return outcome.changes;
+  if (outcome.reason === "adapter-threw") {
     log.warn(
-      `[record-changes] no change for event ${entry.event.id} (${entry.event.$type}): ${
-        err instanceof Error ? err.message : String(err)
-      }`,
+      `[record-changes] no change for event ${entry.event.id} (${entry.event.$type}): ${outcome.detail}`,
     );
-    return [];
   }
-  return changes.every((change) => CONVERTED_KINDS.has(change.kind))
-    ? changes
-    : [];
+  return [];
 }
 
 /**
@@ -129,6 +211,74 @@ export function feedRows(
         ? null
         : JSON.stringify(encodeBytes(change.record)),
   }));
+}
+
+/**
+ * Why an entry with no rows is a hole in the feed.
+ *
+ *  - `rows-missing` — the adapter emits changes for this entry and the feed
+ *    holds none of them.
+ *  - `rows-partial` — the feed holds some of them, fewer than the adapter
+ *    now emits.
+ *  - `adapter-threw` — the adapter cannot describe the entry, so the write
+ *    path wrote nothing for it.
+ *  - `unconverted-kind` — the entry's kinds are not all converted, so it was
+ *    deliberately left on the event path.
+ */
+export type FeedGapReason =
+  | "rows-missing"
+  | "rows-partial"
+  | "adapter-threw"
+  | "unconverted-kind";
+
+/** A log entry the feed is shorter than the log by one entry for. */
+export interface FeedGap {
+  readonly stream: string;
+  readonly idx: number;
+  readonly eventId: string;
+  readonly type: string;
+  readonly reason: FeedGapReason;
+}
+
+/**
+ * The gap `entry` leaves in the feed, or `null` when the feed agrees with the
+ * log at that entry.
+ *
+ * `rowOrds` are the `ord` values `record_changes` holds for this entry's
+ * `(stream, idx)`. The comparison is against what the adapter emits now, so an
+ * entry whose row set predates a change in the adapter's output — a type that
+ * began emitting a second change — is reported rather than assumed complete.
+ *
+ * An entry the feed is right to omit is not a gap: a type that declares no
+ * record has no rows by design, and an entry that cannot be converted has no
+ * consumer waiting for it if the feed holds no rows for it.
+ */
+export function feedGap(
+  entry: LoggedEvent,
+  streamId: StreamDid,
+  rowOrds: readonly number[],
+): FeedGap | null {
+  const outcome = describeFeedChanges(entry, streamId);
+  const gap = (reason: FeedGapReason): FeedGap => ({
+    stream: streamId,
+    idx: entry.idx,
+    eventId: entry.event.id,
+    type: entry.event.$type,
+    reason,
+  });
+
+  if (outcome.ok) {
+    if (outcome.changes.length === 0) return null;
+    const present = new Set(rowOrds);
+    const complete = outcome.changes.every((_, ord) => present.has(ord));
+    if (complete) return null;
+    return gap(present.size === 0 ? "rows-missing" : "rows-partial");
+  }
+
+  if (outcome.reason === "no-record-kind") return null;
+  if (!outcome.declared.some((kind) => CONVERTED_KINDS.has(kind))) return null;
+  if (rowOrds.length > 0) return null;
+  return gap(outcome.reason);
 }
 
 /** Replace every `Uint8Array` in a JSON-shaped value with a base64 marker. */

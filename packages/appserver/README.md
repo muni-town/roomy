@@ -187,6 +187,73 @@ Litestream is only active when the app runs in the container. For local
 development, run the appserver directly (`bun run packages/appserver/src/index.ts`)
 with no backup config.
 
+## The change feed (`record_changes`)
+
+`stream_events` is the source of truth; `record_changes` is the adapter's output
+for it, written in the same call as the append (`src/streams/recordChanges.ts`).
+A worker that applies change records reads rows rather than events, so a row
+that was never written shortens the feed silently: the worker applies fewer
+changes than the log holds, and the first symptom is a downstream constraint
+failure — an entity whose parent was one of the missing rows.
+
+`scripts/backfill-record-changes.ts` both finds and repairs that, from the same
+adapter the write path runs. Run it on the events DB (`--events <path>`, or
+`--data-dir <dir>` containing `roomy-events.sqlite`).
+
+### Find a gap
+
+```bash
+bun run scripts/backfill-record-changes.ts --verify --events /data/roomy-events.sqlite
+```
+
+Every log entry whose event type declares a converted kind but which the feed
+holds no row for is reported with its `idx`, event id, type and reason, indented
+under a one-line summary per stream:
+
+```
+record_changes audit: 2 streams, 372 events, 1 gap
+did:plc:4uepaw2cimtrcm2zjh2tqzes: 186 events, 1 gap — incomplete
+  idx 172  01M36B664D1V95NTY9QAMA7MW8  space.roomy.message.createMessage.v0  rows-missing
+did:plc:…: 186 events, 0 gaps — complete
+```
+
+`--json` prints the same as one document — `{events, streams: [{stream, events,
+gaps}], gaps: [{stream, idx, eventId, type, reason}]}` — for piping into `jq`.
+
+Reasons:
+
+| `reason` | means |
+|---|---|
+| `rows-missing` | the adapter emits changes for the entry; the feed holds none |
+| `rows-partial` | the feed holds some of them, fewer than the adapter emits now |
+| `adapter-threw` | the adapter cannot describe the entry, so the write path wrote nothing for it |
+| `unconverted-kind` | the entry's kinds are not all converted, so it stays on the event path |
+
+An event type that declares no record at all (`setHandleProvider`, `editPage`,
+`reorderMessage`, `markRead`) is not a gap — the feed is correct in omitting it.
+
+Exit codes: `0` every stream's feed is complete, `1` at least one gap, `2` the
+check could not run (unreadable file, or a database with no `stream_events`).
+The audit opens the database read-only: it never repairs what it finds.
+
+### Repair
+
+```bash
+bun run scripts/backfill-record-changes.ts --stream did:plc:4uepaw2cimtrcm2zjh2tqzes \
+  --events /data/roomy-events.sqlite
+```
+
+The write mode walks the stream in `idx` order and writes the rows the adapter
+emits, `insert or replace` keyed by `(stream_id, idx, ord)`, so it is idempotent
+and re-running it over a range that is already correct rewrites the same rows.
+`--dry-run` reports the counts without writing. Then restart the consumer so it
+reads the repaired feed from a cursor at or before the gap.
+
+Run either mode with the appserver stopped where possible. Behind a live writer
+it is survivable — both modes set a busy timeout — but expect `SQLITE_BUSY`
+retries while the writer holds the DB. There is no boot sweep: repair is this
+script, run by hand.
+
 ## Lexicons
 
 `lexicons/` holds the ATProto JSON lexicons this service defines, grouped by
