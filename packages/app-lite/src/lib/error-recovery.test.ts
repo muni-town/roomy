@@ -36,11 +36,17 @@
 import { afterEach, beforeEach, describe, test } from "node:test";
 import assert from "node:assert/strict";
 
-import { isRecoverableAtprotoError } from "./error-recovery.ts";
+import {
+  classifySessionFailure,
+  isRecoverableAtprotoError,
+} from "./error-recovery.ts";
 import type {
   installGlobalErrorRecovery,
   noteSuccessfulNavigation,
+  SessionFailure,
   setSessionExpiryHandler,
+  setSessionFailureNoticeHandler,
+  setSessionFailureObserver,
 } from "./error-recovery.ts";
 
 /** The documented budget. Not exported; pinned here as observable behavior. */
@@ -54,6 +60,8 @@ type RecoveryModule = {
   installGlobalErrorRecovery: typeof installGlobalErrorRecovery;
   noteSuccessfulNavigation: typeof noteSuccessfulNavigation;
   setSessionExpiryHandler: typeof setSessionExpiryHandler;
+  setSessionFailureNoticeHandler: typeof setSessionFailureNoticeHandler;
+  setSessionFailureObserver: typeof setSessionFailureObserver;
 };
 
 /** The `window` the module under test installs its listeners on. */
@@ -73,6 +81,10 @@ interface Page {
    * still be observed reaching the branch.
    */
   sessionExpiries: Error[];
+  /** Notices the page asked the host to show, in order; see `SessionFailure`. */
+  notices: SessionFailure[];
+  /** Every classified session failure the page reported, in order. */
+  reported: SessionFailure[];
 }
 
 /**
@@ -165,6 +177,8 @@ function createBrowser(): Browser {
     const handlers = new Map<string, Array<(event: unknown) => void>>();
     const timers: Array<() => void> = [];
     const sessionExpiries: Error[] = [];
+    const notices: SessionFailure[] = [];
+    const reported: SessionFailure[] = [];
 
     installGlobals({
       sessionStorage: storage,
@@ -191,11 +205,19 @@ function createBrowser(): Browser {
     module.setSessionExpiryHandler((err) => {
       sessionExpiries.push(err as Error);
     });
+    module.setSessionFailureNoticeHandler((failure) => {
+      notices.push(failure);
+    });
+    module.setSessionFailureObserver((failure) => {
+      reported.push(failure);
+    });
 
     return {
       module,
       page: {
         sessionExpiries,
+        notices,
+        reported,
         fire(type, event) {
           for (const handler of handlers.get(type) ?? []) handler(event);
         },
@@ -233,11 +255,60 @@ function staleChunk(): { payload: Error } {
   };
 }
 
-/** A recoverable ATProto session failure — the other trigger on this path. */
-function deadSession(): Error {
-  return Object.assign(new Error("token refresh failed"), {
+/**
+ * A session failure with no cause the classifier can name: a PDS 401 carrying
+ * no message it recognises. These still spend the shared reload budget and hand
+ * off to the login path once it is gone — the behaviour the budget exists for.
+ */
+function unattributedSessionFailure(): Error {
+  return Object.assign(new Error("getServiceAuth failed (401)"), {
+    status: 401,
+  });
+}
+
+/**
+ * A dead OAuth session, as the OAuth client reports it. The refresh was
+ * rejected, so the session is dead where it is held: worth one reload to
+ * confirm it, not the whole shared budget.
+ */
+function refreshRejected(): Error {
+  return Object.assign(new Error("could not renew session credentials"), {
     name: "TokenRefreshError",
   });
+}
+
+/**
+ * The device's clock ahead of the server's, as the authorization server words
+ * it. Every request the session layer signs is rejected, so nothing a reload
+ * does can help: the clock has to be corrected.
+ */
+function dpopClockAhead(): Error {
+  return Object.assign(new Error("DPoP proof iat is in the future"), {
+    status: 401,
+  });
+}
+
+/** The device's clock behind the server's: the proof arrived already stale. */
+function dpopProofExpired(): Error {
+  return Object.assign(new Error("DPoP proof expired"), { status: 401 });
+}
+
+/** A session another tab or process removed from the shared store. */
+function sessionDeleted(): Error {
+  return Object.assign(
+    new Error("The session was deleted by another process"),
+    { name: "TokenRefreshError", status: 401 },
+  );
+}
+
+/** The deployed session layer's sentence: not in this repo, but the cause is ours to handle. */
+function sessionExpired(): Error {
+  return new Error("session expired, please re-authenticate");
+}
+
+/** A call made before a session exists (this app's own throw). */
+function notAuthenticated(): Error {
+  return new Error("Not authenticated");
 }
 
 describe("vite:preloadError recovery", () => {
@@ -291,7 +362,7 @@ describe("vite:preloadError recovery", () => {
     // independent reload paths.
     for (let load = 0; load < MAX_RELOADS - 1; load += 1) {
       const page = await browser.load();
-      page.fire("unhandledrejection", { reason: deadSession() });
+      page.fire("unhandledrejection", { reason: unattributedSessionFailure() });
       page.flush();
     }
     assert.equal(browser.reloads, MAX_RELOADS - 1);
@@ -417,13 +488,18 @@ describe("vite:preloadError recovery", () => {
  * out and reloads, which both ends the reason the reloads were being refused
  * and leaves the login path in charge. So the hand-off appears in exactly one
  * page load, and the next load is an ordinary signed-out one.
+ *
+ * The failures here are ones the classifier cannot name. A *named* dead session
+ * never reaches this branch: it gets one reload and then a notice (see "session
+ * failures by cause"), because signing the user out is the last resort and the
+ * cause is what tells them what happened.
  */
 describe("the reload budget, once spent", () => {
   /** Spend the budget from a failure the module's own trigger recognises. */
   async function spendBudget(browser: Browser): Promise<void> {
     for (let load = 0; load < MAX_RELOADS; load += 1) {
       const page = await browser.load();
-      page.fire("unhandledrejection", { reason: deadSession() });
+      page.fire("unhandledrejection", { reason: unattributedSessionFailure() });
       page.flush();
     }
   }
@@ -431,20 +507,20 @@ describe("the reload budget, once spent", () => {
   async function spendAndHandOff(browser: Browser): Promise<Page> {
     await spendBudget(browser);
     const page = await browser.load();
-    page.fire("unhandledrejection", { reason: deadSession() });
+    page.fire("unhandledrejection", { reason: unattributedSessionFailure() });
     page.flush();
     assert.equal(page.sessionExpiries.length, 1);
     return page;
   }
 
-  test("a dead session hands off to the login path instead of looping", async () => {
+  test("an unattributed session failure hands off to the login path instead of looping", async () => {
     const browser = createBrowser();
     browser.advance(0);
     await spendBudget(browser);
     assert.equal(browser.reloads, MAX_RELOADS);
 
     const page = await browser.load();
-    page.fire("unhandledrejection", { reason: deadSession() });
+    page.fire("unhandledrejection", { reason: unattributedSessionFailure() });
     page.flush();
 
     // No further reload — the budget said so — and no silence either: the
@@ -454,7 +530,7 @@ describe("the reload budget, once spent", () => {
     assert.equal(page.sessionExpiries.length, 1);
   });
 
-  test("one dead session hands off once, however many callers report it", async () => {
+  test("one failing session hands off once, however many callers report it", async () => {
     const browser = createBrowser();
     browser.advance(0);
     await spendBudget(browser);
@@ -464,8 +540,8 @@ describe("the reload budget, once spent", () => {
     // acted on.
     const page = await browser.load();
     for (let i = 0; i < 5; i += 1) {
-      page.fire("unhandledrejection", { reason: deadSession() });
-      page.fire("error", { error: deadSession() });
+      page.fire("unhandledrejection", { reason: unattributedSessionFailure() });
+      page.fire("error", { error: unattributedSessionFailure() });
     }
     page.flush();
 
@@ -490,12 +566,12 @@ describe("the reload budget, once spent", () => {
 
   test("a fresh budget reloads instead of handing off", async () => {
     // The hand-off belongs to the exhausted branch alone: while reloads
-    // remain, a dead session is still retried by reload, not given up on.
+    // remain, a session failure is still retried by reload, not given up on.
     const browser = createBrowser();
     browser.advance(0);
     const page = await browser.load();
 
-    page.fire("unhandledrejection", { reason: deadSession() });
+    page.fire("unhandledrejection", { reason: unattributedSessionFailure() });
     page.flush();
 
     assert.equal(browser.reloads, 1);
@@ -512,7 +588,9 @@ describe("the reload budget, once spent", () => {
     await spendAndHandOff(browser);
 
     const afterHandOff = await browser.load();
-    afterHandOff.fire("unhandledrejection", { reason: deadSession() });
+    afterHandOff.fire("unhandledrejection", {
+      reason: unattributedSessionFailure(),
+    });
     afterHandOff.flush();
 
     assert.equal(browser.reloads, MAX_RELOADS + 1);
@@ -531,7 +609,7 @@ describe("the reload budget, once spent", () => {
 
     await spendBudget(browser);
     const page = await browser.load();
-    page.fire("unhandledrejection", { reason: deadSession() });
+    page.fire("unhandledrejection", { reason: unattributedSessionFailure() });
     page.flush();
 
     assert.equal(page.sessionExpiries.length, 1);
@@ -552,29 +630,236 @@ function appserverUnauthorized(): Error {
   );
 }
 
-/** A dead OAuth session, as the OAuth client reports it. */
-function tokenRefreshFailed(): Error {
-  return Object.assign(new Error("could not renew session credentials"), {
-    name: "TokenRefreshError",
-  });
-}
+/**
+ * The cause every fixture reports, in the order the classifier checks them. The
+ * five causes the user can act on differently are the point: a wrong clock, a
+ * session deleted elsewhere, a refused refresh, an expired session and a call
+ * with no session at all used to reach the recovery path as the same 401.
+ */
+describe("classifySessionFailure", () => {
+  const causes: Array<[string, () => unknown, string]> = [
+    ["a device clock ahead of the server", dpopClockAhead, "dpop-clock-ahead"],
+    ["a device clock behind the server", dpopProofExpired, "dpop-proof-expired"],
+    ["a session deleted by another process", sessionDeleted, "session-deleted"],
+    [
+      "the session layer's expired-session sentence",
+      sessionExpired,
+      "session-expired",
+    ],
+    ["a call made before a session exists", notAuthenticated, "session-absent"],
+    ["a refused token refresh", refreshRejected, "refresh-401"],
+    ["a session failure with no readable cause", unattributedSessionFailure, "none"],
+  ];
 
-/** A PDS-level 401 (service-auth fetch) — no `nsid`, so no XRPC provenance. */
-function pdsUnauthorized(): Error {
-  return Object.assign(new Error("getServiceAuth failed (401)"), {
-    status: 401,
-  });
-}
+  for (const [name, err, cause] of causes) {
+    test(`${name} is named, or left unnamed when nothing names it`, () => {
+      const failure = classifySessionFailure(err());
+      assert.equal(failure?.cause ?? "none", cause);
+    });
+  }
 
-describe("isRecoverableAtprotoError", () => {
-  test("an appserver XRPC 401 is not recoverable, session failures are", () => {
-    // A reload discards scroll position and in-progress composer state, so the
-    // bar for reloading is "a reload could fix it". A per-resource 401 carrying
-    // an `nsid` fails that bar even when its message reads like an OAuth one.
+  test("a DPoP clock failure is not recoverable by a reload", () => {
+    // A reload re-runs session restore against the same clock. It was reached
+    // as "recoverable" only because it is a bare 401, and the recovery it earned
+    // was three reloads and a sign-out — the failure this classification exists
+    // to stop.
+    assert.equal(isRecoverableAtprotoError(dpopClockAhead()), false);
+    assert.equal(
+      classifySessionFailure(dpopClockAhead())?.disposition,
+      "notice",
+    );
+
+    // The same, for the proof that arrived stale.
+    assert.equal(isRecoverableAtprotoError(dpopProofExpired()), false);
+    assert.equal(
+      classifySessionFailure(dpopProofExpired())?.disposition,
+      "notice",
+    );
+  });
+
+  test("an appserver XRPC 401 names no session failure", () => {
+    // A per-resource authorization failure carries an `nsid` and is not a dead
+    // session: it must stay unnamed, and stay unrecoverable.
+    assert.equal(classifySessionFailure(appserverUnauthorized()), null);
     assert.equal(isRecoverableAtprotoError(appserverUnauthorized()), false);
+  });
 
-    // The other two directions: these are why the trigger exists at all.
-    assert.equal(isRecoverableAtprotoError(tokenRefreshFailed()), true);
-    assert.equal(isRecoverableAtprotoError(pdsUnauthorized()), true);
+  test("a session-layer failure keeps its cause through an XRPC wrapper", () => {
+    // The deployed layer's sentence arrives with the XRPC nsid attached when the
+    // call was proxied. The cause outranks the nsid guard: the session is dead
+    // for the same reason it would be on a bare fetch.
+    const proxied = Object.assign(
+      new Error("XRPC space.roomy.user.getProfile failed (401): session expired, please re-authenticate"),
+      { status: 401, nsid: "space.roomy.user.getProfile" },
+    );
+    assert.equal(classifySessionFailure(proxied)?.cause, "session-expired");
+  });
+});
+
+/** The cause a log line carried, from the structured field the call sites append. */
+function loggedCause(args: unknown[]): string | undefined {
+  const fields = args[2];
+  if (fields == null || typeof fields !== "object" || !("cause" in fields)) {
+    return undefined;
+  }
+  return typeof fields.cause === "string" ? fields.cause : undefined;
+}
+
+describe("session failures by cause", () => {
+  test("the clock failure shows the notice and spends no reload", async () => {
+    const browser = createBrowser();
+    browser.advance(0);
+    const page = await browser.load();
+
+    page.fire("unhandledrejection", { reason: dpopClockAhead() });
+    page.flush();
+
+    // No reload, no sign-out: neither could change the device's clock.
+    assert.equal(browser.reloads, 0);
+    assert.equal(page.sessionExpiries.length, 0);
+    // The notice is the whole recovery, and it names the cause.
+    assert.deepEqual(
+      page.notices.map((notice) => notice.cause),
+      ["dpop-clock-ahead"],
+    );
+  });
+
+  test("the clock notice leaves the reload budget for the failures it can fix", async () => {
+    const browser = createBrowser();
+    browser.advance(0);
+    const page = await browser.load();
+    page.fire("unhandledrejection", { reason: dpopClockAhead() });
+    page.flush();
+
+    // A stale chunk after the clock failure still owns the full budget.
+    for (let load = 0; load < MAX_RELOADS; load += 1) {
+      const next = await browser.load();
+      next.fire("vite:preloadError", staleChunk());
+      next.flush();
+    }
+    assert.equal(browser.reloads, MAX_RELOADS);
+  });
+
+  test("a clock failure reported by every failed request notifies once", async () => {
+    const browser = createBrowser();
+    browser.advance(0);
+    const page = await browser.load();
+
+    // One wrong clock fails every query, the profile fetch and the sync socket
+    // at once; they are one failure to the user.
+    for (let i = 0; i < 8; i += 1) {
+      page.fire("unhandledrejection", { reason: dpopClockAhead() });
+    }
+    page.flush();
+
+    assert.equal(page.notices.length, 1);
+    assert.equal(browser.reloads, 0);
+  });
+
+  test("a dead session spends one reload, then shows the notice with its cause", async () => {
+    const browser = createBrowser();
+    browser.advance(0);
+
+    const first = await browser.load();
+    first.fire("unhandledrejection", { reason: refreshRejected() });
+    first.flush();
+    assert.equal(browser.reloads, 1);
+    assert.equal(first.notices.length, 0);
+
+    // The reloaded document finds the session still dead. One reload was the
+    // budget this failure is worth: the second document shows the cause and the
+    // way to sign in instead of retrying a third and fourth time.
+    const second = await browser.load();
+    second.fire("unhandledrejection", { reason: refreshRejected() });
+    second.flush();
+
+    assert.equal(browser.reloads, 1);
+    assert.equal(second.sessionExpiries.length, 0);
+    assert.deepEqual(
+      second.notices.map((notice) => notice.cause),
+      ["refresh-401"],
+    );
+  });
+
+  test("a session deleted elsewhere is one reload too, under its own cause", async () => {
+    const browser = createBrowser();
+    browser.advance(0);
+
+    const first = await browser.load();
+    first.fire("unhandledrejection", { reason: sessionDeleted() });
+    first.flush();
+    assert.equal(browser.reloads, 1);
+
+    const second = await browser.load();
+    second.fire("unhandledrejection", { reason: sessionDeleted() });
+    second.flush();
+
+    assert.equal(browser.reloads, 1);
+    assert.deepEqual(
+      second.notices.map((notice) => notice.cause),
+      ["session-deleted"],
+    );
+  });
+
+  test("a call with no session is recorded and otherwise left alone", async () => {
+    // Before a session exists, every startup query throws "Not authenticated".
+    // That is the login path's normal state: no reload (it would loop) and no
+    // notice (the sign-in screen is already up), but the corpus still counts it.
+    const browser = createBrowser();
+    browser.advance(0);
+    const page = await browser.load();
+
+    for (let i = 0; i < 3; i += 1) {
+      page.fire("unhandledrejection", { reason: notAuthenticated() });
+    }
+    page.flush();
+
+    assert.equal(browser.reloads, 0);
+    assert.equal(page.notices.length, 0);
+    assert.deepEqual(
+      page.reported.map((failure) => failure.cause),
+      ["session-absent"],
+    );
+  });
+
+  test("every session failure reaches the observer with its cause", async () => {
+    const browser = createBrowser();
+    browser.advance(0);
+    const page = await browser.load();
+
+    page.fire("unhandledrejection", { reason: dpopClockAhead() });
+    page.fire("unhandledrejection", { reason: sessionExpired() });
+    page.fire("unhandledrejection", { reason: unattributedSessionFailure() });
+    page.flush();
+
+    assert.deepEqual(
+      page.reported.map((failure) => failure.cause),
+      ["dpop-clock-ahead", "session-expired", "unattributed"],
+    );
+  });
+
+  test("every session-failure log line carries its cause", async () => {
+    const browser = createBrowser();
+    browser.advance(0);
+    const page = await browser.load();
+
+    const lines: unknown[][] = [];
+    const realWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      lines.push(args);
+    };
+    try {
+      page.fire("unhandledrejection", { reason: dpopClockAhead() });
+      page.fire("unhandledrejection", { reason: unattributedSessionFailure() });
+      page.flush();
+    } finally {
+      console.warn = realWarn;
+    }
+
+    // The clock line reports no reload, with the cause attached; the
+    // unattributed one reloads, with its label attached.
+    const causes = lines.map(loggedCause);
+    assert.ok(causes.includes("dpop-clock-ahead"));
+    assert.ok(causes.includes("unattributed"));
   });
 });

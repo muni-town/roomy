@@ -30,6 +30,10 @@
 import type { Faro } from "@grafana/faro-web-sdk";
 import { browser } from "$app/environment";
 import { CONFIG } from "$lib/config";
+import type {
+  SessionFailureCause,
+  SessionFailureDisposition,
+} from "../error-recovery";
 import { pseudonymiseDid, scrubTelemetryItem } from "./scrub";
 
 let initialized = false;
@@ -191,4 +195,24 @@ export function trackMeasurement(
     values: { value },
     ...(context ? { context } : {}),
   });
+}
+
+/**
+ * Report one session failure as a Faro event, keyed by cause.
+ *
+ * The console line `error-recovery.ts` writes already carries the cause, but a
+ * log line has to be parsed, and a failure the client handles without a reload
+ * (a clock the server rejected, a notice shown instead) is the class this exists
+ * to count. `cause` is the classifier's label (`SessionFailureCause`) and
+ * `disposition` the recovery it earned, so a query can separate "the clock is
+ * wrong" from "the session died" from "a reload fixed it" over any window.
+ *
+ * Goes through `trackEvent`, so a failure raised before the SDK finished
+ * loading is buffered rather than lost.
+ */
+export function recordSessionFailure(
+  cause: SessionFailureCause,
+  disposition: SessionFailureDisposition,
+): void {
+  trackEvent("session-failure", { cause, disposition });
 }

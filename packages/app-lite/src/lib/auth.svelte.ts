@@ -30,7 +30,7 @@ import {
   decideLoginScope,
   decideScopeReauthIdentity,
 } from "./scope-grant";
-import { scheduleAutoReload } from "./error-recovery";
+import { scheduleAutoReload, sessionFailureFields } from "./error-recovery";
 import { pxUnauth } from "./client";
 import { clearPersistedCache } from "./client";
 import { openNativeSessionStore } from "./cache-store";
@@ -209,7 +209,7 @@ async function trackGrant(oauthSession: OAuthSession) {
       });
     } catch (err) {
       // Non-fatal: the grant self-heals on next login.
-      console.warn("Failed to record scope grant:", err);
+      console.warn("Failed to record scope grant:", err, sessionFailureFields(err));
     }
   }
 }
@@ -704,7 +704,7 @@ export async function updateProfile() {
     // is the *signed-out* affordance and is only ever written on success, so
     // it is deliberately left alone here: it is verified against its DID
     // before being offered (see `last-login.svelte.ts`).
-    console.warn("Failed to fetch profile:", e);
+    console.warn("Failed to fetch profile:", e, sessionFailureFields(e));
   }
 }
 
@@ -750,7 +750,7 @@ export async function logout() {
       await sdkLogout(session);
     }
   } catch (err) {
-    console.warn("[logout] revoking the session failed:", err);
+    console.warn("[logout] revoking the session failed:", err, sessionFailureFields(err));
   }
   serviceAuth?.clear();
   serviceAuth = null;

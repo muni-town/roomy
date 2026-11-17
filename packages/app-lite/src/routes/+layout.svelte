@@ -11,7 +11,7 @@
   import { installExternalLinkHandler } from "$lib/external-link-handler";
   import { installPushDebug } from "$lib/push-debug";
   import { preloadSpaceSidebars } from "$lib/preload";
-  import { initFaro, setFaroUser } from "$lib/telemetry/faro";
+  import { initFaro, recordSessionFailure, setFaroUser } from "$lib/telemetry/faro";
   import { initTileTelemetry } from "$lib/telemetry/tile-events";
   import {
     installNotificationNavigateListener,
@@ -24,7 +24,11 @@
     noteSuccessfulNavigation,
     resetReloadBudget,
     setSessionExpiryHandler,
+    setSessionFailureNoticeHandler,
+    setSessionFailureObserver,
   } from "$lib/error-recovery";
+  import { showSessionFailureNotice } from "$lib/session-failure.svelte";
+  import SessionFailureNotice from "$lib/components/layout/SessionFailureNotice.svelte";
   import { serverBar } from "$lib/components/layout/server-bar.svelte";
   import { settingsBar } from "$lib/components/layout/settings-bar.svelte";
   import { requireAuth } from "$lib/components/layout/auth-guard.svelte";
@@ -66,6 +70,18 @@
     // already owns `logout`, so `error-recovery` stays independent of auth.
     setSessionExpiryHandler(() => {
       void logout();
+    });
+    // A session failure a reload cannot repair ends in a notice instead of a
+    // loop: the cause is what the user needs to read (a wrong device clock, a
+    // session ended elsewhere) and `error-recovery` holds no copy of its own.
+    setSessionFailureNoticeHandler((failure) => {
+      showSessionFailureNotice(failure.cause);
+    });
+    // Every classified session failure is counted by cause, whatever recovery
+    // it earns, so the corpus separates a clock skew from an expiry from a
+    // session another tab removed.
+    setSessionFailureObserver((failure) => {
+      recordSessionFailure(failure.cause, failure.disposition);
     });
     // Faro first so console capture/error instrumentation is active before
     // auth/bootstrap logs anything (no-op unless PUBLIC_FARO_URL is set).
@@ -285,4 +301,10 @@
     <!-- Not logged in — show login modal -->
     <LoginModal />
   {/if}
+
+  <!-- Shown over the app rather than inside a view: a dead session or a wrong
+       device clock fails every route at once, so there is no view left to put
+       it in. `onSignIn` is `logout`, the same terminal step the reload-budget
+       hand-off takes. -->
+  <SessionFailureNotice onSignIn={() => void logout()} />
 </QueryClientProvider>

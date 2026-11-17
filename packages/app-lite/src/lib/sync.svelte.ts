@@ -14,6 +14,7 @@ import { queryClient } from "./client";
 import { px } from "./auth.svelte";
 import { CONFIG } from "./config";
 import { voicePresence } from "./voice/presence.svelte";
+import { sessionFailureFields } from "./error-recovery";
 
 const { SyncConnection, SyncRouter, TopicManager } = sync;
 const { resolveAppserverWsOrigin } = transport;
@@ -421,7 +422,10 @@ export function startSync(opts: { onLog?: (msg: string) => void } = {}) {
   });
   ctx.connect().catch((err) => {
     const msg = `Sync connect failed: ${err instanceof Error ? err.message : String(err)}`;
-    console.error(`[sync] ${msg}`);
+    // The cause rides along: a sync connect that a wrong device clock killed
+    // reads the same as one a dead session did, and only the label separates
+    // them in the corpus.
+    console.error(`[sync] ${msg}`, sessionFailureFields(err));
     opts.onLog?.(msg);
   });
   document.addEventListener("visibilitychange", onVisibilityChange);
