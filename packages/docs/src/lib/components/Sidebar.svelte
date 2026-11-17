@@ -72,6 +72,13 @@
       >
         Quickstart
       </a>
+      <a
+        href="/bridge"
+        class="block px-3 py-2 rounded-lg text-sm font-medium transition-colors
+          {isActive('/bridge') ? 'bg-accent-100 dark:bg-accent-900/30 text-accent-700 dark:text-accent-300' : 'text-base-600 dark:text-base-400 hover:bg-base-100 dark:hover:bg-base-900'}"
+      >
+        Building a bridge
+      </a>
 
       <div class="mt-6 mb-2">
         <h3 class="px-3 text-xs font-semibold uppercase tracking-wider text-base-400 dark:text-base-500">Concepts</h3>

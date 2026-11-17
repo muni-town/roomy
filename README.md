@@ -2,6 +2,10 @@
 
 Roomy is a group messaging app that gives online communities tools for autonomous collaboration — designable, gardenable spaces not just for chat, but for cultivating a web of shared understanding together. Roomy is built on [AT Protocol](https://atproto.com/), with an appserver that owns its own local SQLite event store. See [this blog post](https://blog.muni.town/brief-history-of-roomy-architectures/) to understand a bit about how this project is developed and where we are now.
 
+## Documentation
+
+API reference, concepts, and integration guides live at **[docs.roomy.space](https://docs.roomy.space)** — including [building a bridge](https://docs.roomy.space/bridge) between Roomy and another chat network.
+
 ## Key Features
 
 **Content fluidity:** In Roomy, every communication artifact can be expanded seamlessly from chat message up to a wiki-page or even standalone channel. [Chatty message gardening](https://blog.muni.town/chatty-community-gardens/)
