@@ -89,7 +89,13 @@
   }
 
   html {
-    height: 100%;
+    /* A percentage height on the root resolves against the initial containing
+       block, which on a phone is the *large* viewport: with the browser's
+       toolbars showing, that box is taller than the visible area, so the
+       document keeps scroll slack that iOS scrolls on a rotation — carrying
+       the navbar off the top. The dynamic viewport unit is the one that
+       tracks what is actually visible. */
+    height: 100dvh;
     overflow: hidden;
     overscroll-behavior-x: none;
   }

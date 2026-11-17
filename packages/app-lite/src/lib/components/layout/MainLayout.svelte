@@ -244,14 +244,15 @@
 <style>
   /* ── Main panel margin transition ────────────────────────────── */
   .main-panel {
-    /* Fill the visible viewport below the status bar so the panel (and thus
-       the body document) never overflows it. The body pads the top by
-       env(safe-area-inset-top), so subtract that inset to match the original
-       `h-full` sizing (100% of the padded body) — an overflow here made the
-       page scrollable on iOS, letting the navbar scroll off-screen. Dynamic
-       viewport height (dvh) tracks the toolbar and is immune to vaul-svelte
-       setting the body height to auto. On desktop the inset is 0, so this is
-       just 100dvh (== 100vh). */
+    /* Exactly the body's content box: the document is 100dvh tall (see
+       app.css) and the body pads its top by env(safe-area-inset-top), so the
+       panel fills the visible viewport from below the status bar to its
+       bottom edge. Any overflow here makes the document scroller have slack
+       on iOS, and a rotation can then scroll the navbar off-screen; dvh keeps
+       the box tracking the browser's toolbars instead of the large viewport.
+       The dynamic unit also keeps vaul-svelte's `height: auto` on the body
+       from affecting the panel. On desktop the inset is 0, so this is just
+       100dvh (== 100vh). */
     height: calc(100dvh - env(safe-area-inset-top));
     transition: margin-left 400ms cubic-bezier(0.33, 1, 0.68, 1);
     will-change: margin-left;
