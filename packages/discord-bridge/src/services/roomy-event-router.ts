@@ -22,10 +22,13 @@
  *   (they were already bridged to Discord)
  *
  * Error handling:
- * - Handlers log errors with full context (message ID, channel ID, etc.)
- *   then rethrow so the gateway can control cursor advancement.
- * - The gateway catches rethrown errors and freezes the cursor so the
- *   failed event is retried on restart.
+ * - A Roomy→Discord send that fails is recorded in `failed_sends`: a
+ *   deterministic Discord refusal (4xx other than 429) is terminal and the
+ *   event is skipped on every replay; a transient failure stays pending for
+ *   the send-retry sweep, so it is still delivered later. Handlers that do
+ *   not send to Discord rethrow, and the gateway logs the error.
+ * - The gateway advances the stream cursor after each frame either way; a
+ *   retry therefore never depends on the cursor or on a reconnect.
  */
 
 import type { Event } from "@roomy-space/sdk";
@@ -43,6 +46,7 @@ import type {
 import type { ProfileResolver } from "../roomy/profile-resolver.ts";
 import { reconnectDelayMs } from "../utils/backoff.ts";
 import { blocksToDiscordMarkdown } from "./blocks-to-discord.ts";
+import { type DiscordSendOp, queueDiscordSendFailure } from "./send-retry.ts";
 
 const log = createLogger("roomy-router");
 
@@ -56,6 +60,20 @@ const log = createLogger("roomy-router");
 const ROOMY_BACKFILL_MESSAGE_BOUND = 1_000;
 /** The appserver rejects a `space.roomy.room.getMessages` page larger than this. */
 const ROOMY_BACKFILL_PAGE_SIZE = 100;
+
+/**
+ * Events whose handler delivers to Discord, and the op recorded if that
+ * delivery fails. Types absent here never write a send outcome: their
+ * failures are rethrown for the gateway to log.
+ */
+const DISCORD_SEND_OPS: Partial<Record<Event["$type"], DiscordSendOp>> = {
+	"space.roomy.message.createMessage.v0": "message_create",
+	"space.roomy.message.editMessage.v0": "message_edit",
+	"space.roomy.message.deleteMessage.v0": "message_delete",
+	"space.roomy.reaction.addReaction.v0": "reaction_add",
+	"space.roomy.message.forwardMessages.v0": "message_forward",
+	"space.roomy.message.moveMessages.v0": "message_move",
+};
 
 /** Render an unknown thrown value for a structured log field. */
 function describeError(err: unknown): string {
@@ -665,41 +683,93 @@ export class RoomyEventRouter {
 			.some((config) => config.spaceDid === spaceDid);
 	}
 
+	/**
+	 * Route one event to its handler.
+	 *
+	 * A Discord send failure is resolved here, once, for every sending
+	 * handler: a recorded outcome means an earlier attempt already owns the
+	 * event (terminal: Discord refused it; pending: the sweep will re-offer
+	 * it), so a replay skips it. A new failure is recorded — terminal for a
+	 * deterministic refusal, pending for a retryable one — and does not
+	 * propagate, because the row now owns delivery. Non-send handlers and
+	 * redeliveries propagate their errors.
+	 */
 	async #handleEvent(
 		spaceDid: string,
 		event: Event,
-		meta: { isBackfill: boolean; userDid: string },
+		meta: { isBackfill: boolean; userDid: string; redelivery?: boolean },
 	): Promise<void> {
-		switch (event.$type) {
-			case "space.roomy.message.createMessage.v0":
-				await this.#handleCreateMessage(spaceDid, event, meta);
-				break;
-			case "space.roomy.message.editMessage.v0":
-				await this.#handleEditMessage(spaceDid, event);
-				break;
-			case "space.roomy.message.deleteMessage.v0":
-				await this.#handleDeleteMessage(spaceDid, event);
-				break;
-			case "space.roomy.reaction.addReaction.v0":
-				await this.#handleAddReaction(spaceDid, event);
-				break;
-			case "space.roomy.reaction.removeReaction.v0":
-				await this.#handleRemoveReaction(spaceDid, event);
-				break;
-			case "space.roomy.room.createRoom.v0":
-				await this.#handleCreateRoom(spaceDid, event);
-				break;
-			case "space.roomy.link.createRoomLink.v0":
-				await this.#handleCreateRoomLink(spaceDid, event);
-				break;
-			case "space.roomy.message.forwardMessages.v0":
-				await this.#handleForwardMessages(spaceDid, event, meta);
-				break;
-			case "space.roomy.message.moveMessages.v0":
-				await this.#handleMoveMessages(spaceDid, event, meta);
-				break;
-			// Ignore other event types (room lifecycle, space events, etc.)
+		const op = DISCORD_SEND_OPS[event.$type];
+		if (op && !meta.redelivery) {
+			const recorded = this.#repo.getDiscordSendFailure(spaceDid, event.id);
+			if (recorded) {
+				log.debug("Skipping event with a recorded Discord send outcome", {
+					spaceDid,
+					eventId: event.id,
+					op,
+					terminal: recorded.terminal,
+				});
+				return;
+			}
 		}
+
+		try {
+			switch (event.$type) {
+				case "space.roomy.message.createMessage.v0":
+					await this.#handleCreateMessage(spaceDid, event, meta);
+					break;
+				case "space.roomy.message.editMessage.v0":
+					await this.#handleEditMessage(spaceDid, event);
+					break;
+				case "space.roomy.message.deleteMessage.v0":
+					await this.#handleDeleteMessage(spaceDid, event);
+					break;
+				case "space.roomy.reaction.addReaction.v0":
+					await this.#handleAddReaction(spaceDid, event);
+					break;
+				case "space.roomy.reaction.removeReaction.v0":
+					await this.#handleRemoveReaction(spaceDid, event);
+					break;
+				case "space.roomy.room.createRoom.v0":
+					await this.#handleCreateRoom(spaceDid, event);
+					break;
+				case "space.roomy.link.createRoomLink.v0":
+					await this.#handleCreateRoomLink(spaceDid, event);
+					break;
+				case "space.roomy.message.forwardMessages.v0":
+					await this.#handleForwardMessages(spaceDid, event, meta);
+					break;
+				case "space.roomy.message.moveMessages.v0":
+					await this.#handleMoveMessages(spaceDid, event, meta);
+					break;
+				// Ignore other event types (room lifecycle, space events, etc.)
+			}
+		} catch (err) {
+			if (!op || meta.redelivery) throw err;
+			queueDiscordSendFailure(this.#repo, {
+				spaceDid,
+				op,
+				event,
+				userDid: meta.userDid,
+				error: err,
+			});
+		}
+	}
+
+	/**
+	 * Re-run one queued Roomy→Discord event. The sweep owns the entry's row,
+	 * so a failure here propagates back to it for the attempt bookkeeping.
+	 */
+	async redeliver(
+		spaceDid: string,
+		event: Event,
+		meta: { userDid: string },
+	): Promise<void> {
+		await this.#handleEvent(spaceDid, event, {
+			isBackfill: false,
+			userDid: meta.userDid,
+			redelivery: true,
+		});
 	}
 
 	async #handleCreateMessage(
@@ -848,31 +918,18 @@ export class RoomyEventRouter {
 		const webhook = await this.#webhooks.ensureWebhook(webhookChannelId);
 
 		// Send to Discord
-		try {
-			const discordMessageId = await this.#discord.sendMessage(
-				discordChannelId,
-				sendContent,
-				{ username, avatarUrl, webhook, threadId, files },
-			);
+		const discordMessageId = await this.#discord.sendMessage(
+			discordChannelId,
+			sendContent,
+			{ username, avatarUrl, webhook, threadId, files },
+		);
 
-			// Register mapping so Discord→Roomy dedup catches the echo
-			this.#repo.registerMapping(
-				spaceDid,
-				"message",
-				discordMessageId,
-				event.id,
-			);
+		// Register mapping so Discord→Roomy dedup catches the echo
+		this.#repo.registerMapping(spaceDid, "message", discordMessageId, event.id);
 
-			log.debug(
-				`Bridged Roomy message ${event.id} → Discord ${discordMessageId} in channel ${discordChannelId}`,
-			);
-		} catch (err) {
-			log.error(
-				`Failed to bridge Roomy message ${event.id} to Discord channel ${discordChannelId}`,
-				err,
-			);
-			throw err;
-		}
+		log.debug(
+			`Bridged Roomy message ${event.id} → Discord ${discordMessageId} in channel ${discordChannelId}`,
+		);
 	}
 
 	/**
@@ -1115,20 +1172,12 @@ export class RoomyEventRouter {
 
 		const webhook = await this.#webhooks.ensureWebhook(webhookChannelId);
 
-		try {
-			await this.#discord.editMessage(
-				discordChannelId,
-				discordMessageId,
-				content,
-				webhook,
-			);
-		} catch (err) {
-			log.error(
-				`Failed to edit Discord message ${discordMessageId} in channel ${discordChannelId}`,
-				err,
-			);
-			throw err;
-		}
+		await this.#discord.editMessage(
+			discordChannelId,
+			discordMessageId,
+			content,
+			webhook,
+		);
 	}
 
 	async #handleDeleteMessage(
@@ -1210,13 +1259,7 @@ export class RoomyEventRouter {
 				viaWebhook ? webhook : undefined,
 			);
 		} catch (err) {
-			if (viaWebhook) {
-				log.error(
-					`Failed to delete Discord message ${discordMessageId} in channel ${discordChannelId}`,
-					err,
-				);
-				throw err;
-			}
+			if (viaWebhook) throw err;
 			// A Discord user authored this message, so the bot needs Manage
 			// Messages to delete it. Without it the Roomy delete can't be
 			// mirrored — keep the mapping rather than failing the event.
@@ -1248,19 +1291,11 @@ export class RoomyEventRouter {
 			this.#repo.getDiscordId(spaceDid, "thread", event.room);
 		if (!discordChannelId) return;
 
-		try {
-			await this.#discord.addReaction(
-				discordChannelId,
-				discordMessageId,
-				event.reaction,
-			);
-		} catch (err) {
-			log.error(
-				`Failed to add reaction to Discord message ${discordMessageId} in channel ${discordChannelId}`,
-				err,
-			);
-			throw err;
-		}
+		await this.#discord.addReaction(
+			discordChannelId,
+			discordMessageId,
+			event.reaction,
+		);
 	}
 
 	async #handleRemoveReaction(
@@ -1517,58 +1552,50 @@ export class RoomyEventRouter {
 				continue;
 			}
 
-			try {
-				// Faux forward: Discord webhooks can't create native forwards, so
-				// send the original content with a "Forwarded from <link> by
-				// <original author>" prefix via the webhook, attributed to the
-				// user who did the forward.
-				const original = await this.#queryMessage(messageId);
-				const originalAuthorName = forwardedAuthorName(original);
-				const forwardContent = await this.#buildForwardContent(
-					targetChannelId,
-					sourceChannelId,
-					discordMessageId,
-					originalAuthorName,
+			// Faux forward: Discord webhooks can't create native forwards, so
+			// send the original content with a "Forwarded from <link> by
+			// <original author>" prefix via the webhook, attributed to the
+			// user who did the forward.
+			const original = await this.#queryMessage(messageId);
+			const originalAuthorName = forwardedAuthorName(original);
+			const forwardContent = await this.#buildForwardContent(
+				targetChannelId,
+				sourceChannelId,
+				discordMessageId,
+				originalAuthorName,
+			);
+			if (!forwardContent) {
+				log.debug(
+					`Skipping ${action} of message ${messageId}: could not build forward content`,
 				);
-				if (!forwardContent) {
-					log.debug(
-						`Skipping ${action} of message ${messageId}: could not build forward content`,
-					);
-					continue;
-				}
-
-				const newDiscordMessageId = await this.#discord.sendMessage(
-					targetChannelId,
-					forwardContent,
-					{ username, avatarUrl, webhook, threadId },
-				);
-
-				// The composite key is a dedup key, not a message id: it is
-				// recorded under its own kind so `(space, "message", discordId)`
-				// only ever holds a ULID. The Discord message also maps to the
-				// Roomy forward message it represents, so a reply/edit/delete/
-				// reaction on it resolves to that ULID.
-				this.#repo.registerMapping(
-					spaceDid,
-					"forward",
-					newDiscordMessageId,
-					compositeKey,
-				);
-				this.#repo.registerMapping(
-					spaceDid,
-					"message",
-					newDiscordMessageId,
-					event.id,
-				);
-
-				count++;
-			} catch (err) {
-				log.error(
-					`Failed to ${action} Discord message ${discordMessageId} to channel ${targetChannelId}`,
-					err,
-				);
-				throw err;
+				continue;
 			}
+
+			const newDiscordMessageId = await this.#discord.sendMessage(
+				targetChannelId,
+				forwardContent,
+				{ username, avatarUrl, webhook, threadId },
+			);
+
+			// The composite key is a dedup key, not a message id: it is
+			// recorded under its own kind so `(space, "message", discordId)`
+			// only ever holds a ULID. The Discord message also maps to the
+			// Roomy forward message it represents, so a reply/edit/delete/
+			// reaction on it resolves to that ULID.
+			this.#repo.registerMapping(
+				spaceDid,
+				"forward",
+				newDiscordMessageId,
+				compositeKey,
+			);
+			this.#repo.registerMapping(
+				spaceDid,
+				"message",
+				newDiscordMessageId,
+				event.id,
+			);
+
+			count++;
 		}
 
 		if (count > 0) {

@@ -71,7 +71,10 @@ import {
 	handleThreadCreate,
 } from "./services/room-sync.ts";
 import { RoomyEventRouter } from "./services/roomy-event-router.ts";
-import { retryQueuedSends } from "./services/send-retry.ts";
+import {
+	retryQueuedSends,
+	setDiscordRedelivery,
+} from "./services/send-retry.ts";
 
 const log = createLogger("bridge");
 let appId: string | undefined;
@@ -284,6 +287,11 @@ async function main() {
 									: undefined;
 							},
 						},
+					);
+					setDiscordRedelivery((entry, event) =>
+						router.redeliver(entry.spaceDid, event, {
+							userDid: entry.userDid ?? "",
+						}),
 					);
 					router
 						.start()

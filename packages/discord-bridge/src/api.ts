@@ -198,8 +198,10 @@ export function buildBackfillProgressPayload(
 function sendStatus(send: FailedSend): {
 	id: number;
 	spaceDid: string;
+	direction: string;
 	op: string;
-	discordId: string;
+	discordId: string | null;
+	roomyEventId: string | null;
 	attempts: number;
 	lastError: string | null;
 	firstFailedAt: number;
@@ -210,8 +212,10 @@ function sendStatus(send: FailedSend): {
 	return {
 		id: send.id,
 		spaceDid: send.spaceDid,
+		direction: send.direction,
 		op: send.op,
 		discordId: send.discordId,
+		roomyEventId: send.roomyEventId,
 		attempts: send.attempts,
 		lastError: send.lastError,
 		firstFailedAt: send.firstFailedAt,

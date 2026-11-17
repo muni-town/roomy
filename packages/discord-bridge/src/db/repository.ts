@@ -115,18 +115,32 @@ export type EventError = {
 };
 
 /**
- * An event send the bridge owes a space after its inline retries were
- * exhausted. Persisted because nothing else revisits the work: the Discord
- * gateway offers a message once, and the channel cursor only gates backfill.
- * Re-offered by the periodic sweep in services/send-retry.ts.
+ * Which side of the bridge the failed send was headed to. `to_roomy` entries
+ * carry Roomy events and are keyed by the Discord message they belong to;
+ * `to_discord` entries carry one Roomy event that Discord refused and are
+ * keyed by that event's id.
+ */
+export type FailedSendDirection = "to_roomy" | "to_discord";
+
+/**
+ * A delivery the bridge owes after its inline attempt failed. Persisted
+ * because nothing else revisits the work: a Discord gateway packet or a
+ * Roomy stream event is offered once, and the cursor only gates backfill.
+ * Pending rows are re-offered by the periodic sweep in
+ * services/send-retry.ts; terminal rows are kept so the drop stays countable.
  */
 export type FailedSend = {
 	id: number;
 	spaceDid: string;
+	direction: FailedSendDirection;
 	/** Which send this is; part of the queue key so a create, its edit and its delete queue separately. */
 	op: string;
-	/** Discord snowflake the send belongs to (message id). */
-	discordId: string;
+	/** Discord snowflake the send belongs to (to_roomy); null for to_discord. */
+	discordId: string | null;
+	/** Roomy event id Discord refused (to_discord); null for to_roomy. */
+	roomyEventId: string | null;
+	/** Stream user DID the event came from, replayed for attribution. */
+	userDid: string | null;
 	/** Mapping registered once the event lands, or null for pure mutations. */
 	mappingKind: MappingKind | null;
 	mappingValue: string | null;
@@ -146,8 +160,11 @@ export type FailedSend = {
 type FailedSendRow = {
 	id: number;
 	space_did: string;
+	direction: string;
 	op: string;
-	discord_id: string;
+	discord_id: string | null;
+	roomy_event_id: string | null;
+	user_did: string | null;
 	mapping_kind: string | null;
 	mapping_value: string | null;
 	event_json: string;
@@ -159,9 +176,9 @@ type FailedSendRow = {
 	terminal: number;
 };
 
-const FAILED_SEND_COLUMNS = `id, space_did, op, discord_id, mapping_kind, mapping_value,
-  event_json, attempts, last_error, first_failed_at, last_failed_at, next_retry_at,
-  terminal`;
+const FAILED_SEND_COLUMNS = `id, space_did, direction, op, discord_id, roomy_event_id,
+  user_did, mapping_kind, mapping_value, event_json, attempts, last_error,
+  first_failed_at, last_failed_at, next_retry_at, terminal`;
 
 /** Row → domain mapping shared by every failed_sends query, so the column
  *  list and the object shape cannot drift apart. */
@@ -169,8 +186,11 @@ function toFailedSend(row: FailedSendRow): FailedSend {
 	return {
 		id: row.id,
 		spaceDid: row.space_did,
+		direction: row.direction === "to_discord" ? "to_discord" : "to_roomy",
 		op: row.op,
 		discordId: row.discord_id,
+		roomyEventId: row.roomy_event_id,
+		userDid: row.user_did,
 		mappingKind: isMappingKind(row.mapping_kind) ? row.mapping_kind : null,
 		mappingValue: row.mapping_value,
 		eventJson: row.event_json,
@@ -1165,10 +1185,12 @@ export class BridgeRepository {
 		this.db
 			.prepare(
 				`INSERT INTO failed_sends
-           (space_did, op, discord_id, mapping_kind, mapping_value, event_json,
-            attempts, last_error, first_failed_at, last_failed_at, next_retry_at, terminal)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-         ON CONFLICT (space_did, op, discord_id) DO UPDATE SET
+           (space_did, direction, op, discord_id, mapping_kind, mapping_value,
+            event_json, attempts, last_error, first_failed_at, last_failed_at,
+            next_retry_at, terminal)
+         VALUES (?, 'to_roomy', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+         ON CONFLICT (space_did, op, discord_id) WHERE direction = 'to_roomy'
+         DO UPDATE SET
            mapping_kind = excluded.mapping_kind,
            mapping_value = excluded.mapping_value,
            event_json = excluded.event_json,
@@ -1191,6 +1213,66 @@ export class BridgeRepository {
 				now,
 				entry.nextRetryAt,
 			);
+	}
+
+	/**
+	 * Record a Roomy→Discord send Discord refused or could not take. One row
+	 * per event: a replay of the same event updates the existing row rather
+	 * than adding a second. A deterministic refusal is written terminal (no
+	 * `nextRetryAt`); a transient one stays pending for the re-offer sweep.
+	 */
+	enqueueDiscordSendFailure(entry: {
+		spaceDid: string;
+		op: string;
+		eventId: string;
+		userDid: string;
+		eventJson: string;
+		error: string;
+		terminal: boolean;
+		nextRetryAt: number | null;
+	}): void {
+		const now = Date.now();
+		this.db
+			.prepare(
+				`INSERT INTO failed_sends
+           (space_did, direction, op, discord_id, roomy_event_id, user_did,
+            mapping_kind, mapping_value, event_json, attempts, last_error,
+            first_failed_at, last_failed_at, next_retry_at, terminal)
+         VALUES (?, 'to_discord', ?, NULL, ?, ?, NULL, NULL, ?, 1, ?, ?, ?, ?, ?)
+         ON CONFLICT (space_did, roomy_event_id) WHERE direction = 'to_discord'
+         DO UPDATE SET
+           op = excluded.op,
+           user_did = excluded.user_did,
+           event_json = excluded.event_json,
+           attempts = failed_sends.attempts + 1,
+           last_error = excluded.last_error,
+           last_failed_at = excluded.last_failed_at,
+           next_retry_at = excluded.next_retry_at,
+           terminal = excluded.terminal`,
+			)
+			.run(
+				entry.spaceDid,
+				entry.op,
+				entry.eventId,
+				entry.userDid,
+				entry.eventJson,
+				entry.error,
+				now,
+				now,
+				entry.nextRetryAt,
+				entry.terminal ? 1 : 0,
+			);
+	}
+
+	/** The recorded Roomy→Discord outcome for an event id, if any. */
+	getDiscordSendFailure(spaceDid: string, eventId: string): FailedSend | null {
+		const row = this.db
+			.query<FailedSendRow, [string, string]>(
+				`SELECT ${FAILED_SEND_COLUMNS} FROM failed_sends
+         WHERE direction = 'to_discord' AND space_did = ? AND roomy_event_id = ?`,
+			)
+			.get(spaceDid, eventId);
+		return row ? toFailedSend(row) : null;
 	}
 
 	/** Entries whose re-offer is due, oldest first. Terminal entries excluded. */

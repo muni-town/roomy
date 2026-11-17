@@ -4,6 +4,7 @@ import type {
 	FailedSend,
 	MappingKind,
 } from "../db/repository.ts";
+import { describeDiscordFailure } from "../discord/rest-errors.ts";
 import { createLogger } from "../logger.ts";
 import { getCapacityGate } from "../roomy/capacity.ts";
 import type { RoomyGateway } from "../roomy/gateway.ts";
@@ -21,6 +22,15 @@ export type SendOp =
 	| "room_create"
 	| "room_update"
 	| "room_delete";
+
+/** Which Roomy→Discord send failed; recorded on the durable row. */
+export type DiscordSendOp =
+	| "message_create"
+	| "message_edit"
+	| "message_delete"
+	| "reaction_add"
+	| "message_forward"
+	| "message_move";
 
 /**
  * Failed delivery attempts before a queued entry is abandoned — one per
@@ -100,6 +110,74 @@ export async function sendEventOrQueue(
 }
 
 /**
+ * Deliver one queued Roomy→Discord entry. The router installs this at boot
+ * through {@link setDiscordRedelivery}: the router imports this module, so
+ * the sweep cannot import it back.
+ */
+export type DiscordRedelivery = (
+	entry: FailedSend,
+	event: Event,
+) => Promise<void>;
+
+let discordRedelivery: DiscordRedelivery | undefined;
+
+/** Install (or clear) the router's redelivery path. */
+export function setDiscordRedelivery(fn: DiscordRedelivery | undefined): void {
+	discordRedelivery = fn;
+}
+
+/**
+ * Record a Roomy→Discord delivery Discord refused and say whether the sweep
+ * should keep trying. A 4xx other than 429 is a decision backoff cannot
+ * change, so the entry is written terminal: every replay of the event skips
+ * it instead of re-sending forever. Everything else (429, 5xx, 999, no status)
+ * stays pending for the re-offer sweep, so a transient failure is still
+ * delivered later.
+ */
+export function queueDiscordSendFailure(
+	repo: BridgeRepository,
+	failure: {
+		spaceDid: string;
+		op: DiscordSendOp;
+		event: Event;
+		userDid: string;
+		error: unknown;
+	},
+): void {
+	const detail = describeDiscordFailure(failure.error);
+	repo.enqueueDiscordSendFailure({
+		spaceDid: failure.spaceDid,
+		op: failure.op,
+		eventId: failure.event.id,
+		userDid: failure.userDid,
+		eventJson: JSON.stringify([failure.event]),
+		error: detail.text,
+		terminal: !detail.retryable,
+		nextRetryAt: detail.retryable ? Date.now() + sweepBackoffMs(1) : null,
+	});
+	// Stable text on purpose: a per-event message line would give every drop
+	// its own log series and hide a burst. Identifiers ride in the fields.
+	const fields = {
+		op: failure.op,
+		spaceDid: failure.spaceDid,
+		eventId: failure.event.id,
+		status: detail.status,
+		classification: detail.classification,
+		retryable: detail.retryable,
+		error: detail.message,
+		discordError: detail.detail,
+	};
+	if (detail.retryable) {
+		log.warn("Roomy→Discord send failed; queued for re-offer", fields);
+	} else {
+		log.error(
+			"Roomy→Discord send failed; Discord refused it, not retrying",
+			fields,
+		);
+	}
+}
+
+/**
  * Re-offer queued sends whose backoff has elapsed. An entry that lands is
  * deleted and its mapping replayed; one that keeps failing backs off until
  * SEND_SWEEP_MAX_ATTEMPTS, then goes terminal. Terminal rows are kept, so
@@ -154,7 +232,7 @@ async function sweepQueuedSends(
 	}
 
 	for (const entry of due) {
-		if (haltedSpaces.has(entry.spaceDid)) {
+		if (entry.direction === "to_roomy" && haltedSpaces.has(entry.spaceDid)) {
 			log.warn("Discord→Roomy send re-offer held: capacity halted", {
 				op: entry.op,
 				spaceDid: entry.spaceDid,
@@ -175,61 +253,131 @@ async function sweepQueuedSends(
 		}
 
 		try {
-			await roomy.sendEvents(entry.spaceDid, events);
-			// The mapping is replayed here rather than by the caller: a queued
-			// send lands outside the handler that issued it, and only what is
-			// stored on the entry can be replayed.
-			if (entry.mappingKind) {
-				if (entry.mappingValue === null) {
-					repo.unregisterMapping(
-						entry.spaceDid,
-						entry.mappingKind,
-						entry.discordId,
-					);
-				} else {
-					repo.registerMapping(
-						entry.spaceDid,
-						entry.mappingKind,
-						entry.discordId,
-						entry.mappingValue,
-					);
+			if (entry.direction === "to_discord") {
+				await redeliverDiscordEntry(entry, events);
+			} else {
+				await roomy.sendEvents(entry.spaceDid, events);
+				// The mapping is replayed here rather than by the caller: a queued
+				// send lands outside the handler that issued it, and only what is
+				// stored on the entry can be replayed. A Roomy→Discord entry needs
+				// none: its handler registers the mapping itself when it lands.
+				if (entry.mappingKind && entry.discordId !== null) {
+					if (entry.mappingValue === null) {
+						repo.unregisterMapping(
+							entry.spaceDid,
+							entry.mappingKind,
+							entry.discordId,
+						);
+					} else {
+						repo.registerMapping(
+							entry.spaceDid,
+							entry.mappingKind,
+							entry.discordId,
+							entry.mappingValue,
+						);
+					}
 				}
 			}
 			repo.deleteFailedSend(entry.id);
-			log.info("Discord→Roomy send re-offer landed", {
-				op: entry.op,
-				spaceDid: entry.spaceDid,
-				discordId: entry.discordId,
-				attempts: entry.attempts,
-			});
+			log.info(
+				entry.direction === "to_discord"
+					? "Roomy→Discord send re-offer landed"
+					: "Discord→Roomy send re-offer landed",
+				{
+					op: entry.op,
+					spaceDid: entry.spaceDid,
+					...(entry.direction === "to_discord"
+						? { eventId: entry.roomyEventId }
+						: { discordId: entry.discordId }),
+					attempts: entry.attempts,
+				},
+			);
 		} catch (err) {
-			const error = describe(err);
+			const failure =
+				entry.direction === "to_discord" ? describeDiscordFailure(err) : null;
+			// Discord answering 4xx (other than 429) will answer the same way
+			// on every re-offer, so the entry goes terminal on the first one
+			// instead of spending the whole attempt budget.
+			if (failure && !failure.retryable) {
+				repo.recordFailedSendAttempt(entry.id, failure.text);
+				repo.markFailedSendTerminal(entry.id, failure.text);
+				log.error("Roomy→Discord send abandoned: Discord refused it", {
+					op: entry.op,
+					spaceDid: entry.spaceDid,
+					eventId: entry.roomyEventId,
+					status: failure.status,
+					classification: failure.classification,
+					error: failure.message,
+					discordError: failure.detail,
+				});
+				continue;
+			}
+			const error = failure ? failure.text : describe(err);
 			// The repository is the only writer of `attempts`, and the count it
 			// returns decides the delay and the terminal test alike: one failed
 			// delivery costs exactly one attempt, and no count read before this
 			// attempt can schedule past the budget. The delay is measured from
 			// the sweep's own clock, the same one that decided what was due.
 			const attempts = repo.recordFailedSendAttempt(entry.id, error);
+			const target =
+				entry.direction === "to_discord"
+					? { eventId: entry.roomyEventId }
+					: { discordId: entry.discordId };
 			if (attempts >= SEND_SWEEP_MAX_ATTEMPTS) {
 				repo.markFailedSendTerminal(entry.id, error);
-				log.error("Discord→Roomy send abandoned after re-offers", {
-					op: entry.op,
-					spaceDid: entry.spaceDid,
-					discordId: entry.discordId,
-					attempts,
-					error,
-				});
+				log.error(
+					entry.direction === "to_discord"
+						? "Roomy→Discord send abandoned after re-offers"
+						: "Discord→Roomy send abandoned after re-offers",
+					{
+						op: entry.op,
+						spaceDid: entry.spaceDid,
+						...target,
+						attempts,
+						error,
+						...(failure
+							? {
+									status: failure.status,
+									classification: failure.classification,
+								}
+							: {}),
+					},
+				);
 			} else {
 				repo.scheduleFailedSendRetry(entry.id, now + sweepBackoffMs(attempts));
-				log.warn("Discord→Roomy send re-offer failed; will retry", {
-					op: entry.op,
-					spaceDid: entry.spaceDid,
-					discordId: entry.discordId,
-					attempts,
-					error,
-				});
+				log.warn(
+					entry.direction === "to_discord"
+						? "Roomy→Discord send re-offer failed; will retry"
+						: "Discord→Roomy send re-offer failed; will retry",
+					{
+						op: entry.op,
+						spaceDid: entry.spaceDid,
+						...target,
+						attempts,
+						error,
+						...(failure
+							? {
+									status: failure.status,
+									classification: failure.classification,
+								}
+							: {}),
+					},
+				);
 			}
 		}
+	}
+}
+
+/** Re-run one queued Roomy→Discord event through the router. */
+async function redeliverDiscordEntry(
+	entry: FailedSend,
+	events: Event[],
+): Promise<void> {
+	if (!discordRedelivery) {
+		throw new Error("no Roomy→Discord redelivery installed");
+	}
+	for (const event of events) {
+		await discordRedelivery(entry, event);
 	}
 }
 

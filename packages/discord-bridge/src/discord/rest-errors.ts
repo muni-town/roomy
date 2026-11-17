@@ -15,25 +15,114 @@ function hasCause(error: unknown): error is { cause: unknown } {
 	return typeof error === "object" && error !== null && "cause" in error;
 }
 
+/** Discord's machine-readable code from the response body (e.g. 10015
+ *  Unknown Webhook), when the body carried one. */
+function failureCode(cause: unknown): number | undefined {
+	if (typeof cause !== "object" || cause === null || !("body" in cause)) {
+		return undefined;
+	}
+	const { body } = cause;
+	if (typeof body !== "string") return undefined;
+	try {
+		const parsed: unknown = JSON.parse(body);
+		if (
+			typeof parsed === "object" &&
+			parsed !== null &&
+			"code" in parsed &&
+			typeof parsed.code === "number"
+		) {
+			return parsed.code;
+		}
+	} catch {
+		// Not JSON — no code to read.
+	}
+	return undefined;
+}
+
 /** Pull the real HTTP status (and error body) out of a discordeno REST error. */
 export function discordFailureDetail(err: unknown): {
 	status: number | undefined;
 	body: string | undefined;
+	code: number | undefined;
 } {
-	if (!hasCause(err)) return { status: undefined, body: undefined };
+	if (!hasCause(err))
+		return { status: undefined, body: undefined, code: undefined };
 	const { cause } = err;
 	if (typeof cause !== "object" || cause === null)
-		return { status: undefined, body: undefined };
-	if (!("status" in cause)) return { status: undefined, body: undefined };
+		return { status: undefined, body: undefined, code: undefined };
+	if (!("status" in cause))
+		return { status: undefined, body: undefined, code: undefined };
 	const { status } = cause;
-	if (typeof status !== "number") return { status: undefined, body: undefined };
+	if (typeof status !== "number")
+		return { status: undefined, body: undefined, code: undefined };
 	const body =
 		"body" in cause && typeof cause.body === "string"
 			? cause.body
 			: "error" in cause && typeof cause.error === "string"
 				? cause.error
 				: undefined;
-	return { status, body };
+	return { status, body, code: failureCode(cause) };
+}
+
+/**
+ * A short, stable name for what the failing status means, so a log line can
+ * tell a rate limit apart from permission loss or a webhook that no longer
+ * exists. `unknown` covers failures with no HTTP status (a timeout, a closed
+ * socket) — those are retried, but the classification says the cause is not
+ * a Discord answer.
+ */
+export type DiscordFailureClass =
+	| "rate_limited"
+	| "network"
+	| "server_error"
+	| "missing_permissions"
+	| "unknown_webhook"
+	| "not_found"
+	| "invalid_request"
+	| "client_error"
+	| "unknown";
+
+export function classifyDiscordFailure(
+	status: number | undefined,
+	code?: number,
+): DiscordFailureClass {
+	if (status === undefined) return "unknown";
+	if (status === 429) return "rate_limited";
+	if (status === 999) return "network";
+	if (status >= 500) return "server_error";
+	if (status === 403) return "missing_permissions";
+	if (status === 404) return code === 10015 ? "unknown_webhook" : "not_found";
+	if (status === 400 || status === 422) return "invalid_request";
+	return "client_error";
+}
+
+/** Everything a caller needs to decide, log and store a Discord failure. */
+export type DiscordFailure = {
+	status: number | undefined;
+	code: number | undefined;
+	classification: DiscordFailureClass;
+	retryable: boolean;
+	/** The thrown error's own message (discordeno's generic one, usually). */
+	message: string;
+	/** Discord's response message, truncated, when the body carried one. */
+	detail: string | undefined;
+	/** `message` with the status and classification appended — durable text. */
+	text: string;
+};
+
+export function describeDiscordFailure(err: unknown): DiscordFailure {
+	const { status, code } = discordFailureDetail(err);
+	const classification = classifyDiscordFailure(status, code);
+	const message = err instanceof Error ? err.message : String(err);
+	return {
+		status,
+		code,
+		classification,
+		retryable: isRetryableDiscordStatus(status),
+		message,
+		detail: discordFailureMessage(err),
+		text: `${message} [Discord ${status ?? "no status"} ${classification}]`,
+	};
 }
 
 /** Max chars of a Discord error body to keep in a durable blocked reason. */

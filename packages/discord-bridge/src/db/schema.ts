@@ -313,6 +313,57 @@ export const MIGRATIONS: Migration[] = [
 			db.run("ALTER TABLE id_mappings ADD COLUMN edit_stamp INTEGER");
 		},
 	},
+	{
+		version: 13,
+		name: "failed_sends_both_directions",
+		up(db) {
+			// The queue held only Discord→Roomy sends, keyed by the Discord
+			// snowflake. A Roomy→Discord send that Discord refuses has no
+			// snowflake and must be keyed by its Roomy event id instead, so
+			// `direction` names the side that failed and `roomy_event_id`
+			// keys the other one. `discord_id` becomes nullable for the same
+			// reason. The old unique key cannot express a conditional target,
+			// so uniqueness moves to one partial index per direction.
+			db.run(`
+        CREATE TABLE failed_sends_new (
+          id              INTEGER PRIMARY KEY AUTOINCREMENT,
+          space_did       TEXT NOT NULL,
+          direction       TEXT NOT NULL DEFAULT 'to_roomy'
+                          CHECK (direction IN ('to_roomy', 'to_discord')),
+          op              TEXT NOT NULL,
+          discord_id      TEXT,
+          roomy_event_id  TEXT,
+          user_did        TEXT,
+          mapping_kind    TEXT,
+          mapping_value   TEXT,
+          event_json      TEXT NOT NULL,
+          attempts        INTEGER NOT NULL DEFAULT 0,
+          last_error      TEXT,
+          first_failed_at INTEGER NOT NULL,
+          last_failed_at  INTEGER NOT NULL,
+          next_retry_at   INTEGER,
+          terminal        INTEGER NOT NULL DEFAULT 0
+        );
+
+        INSERT INTO failed_sends_new
+          (id, space_did, direction, op, discord_id, roomy_event_id, user_did,
+           mapping_kind, mapping_value, event_json, attempts, last_error,
+           first_failed_at, last_failed_at, next_retry_at, terminal)
+        SELECT id, space_did, 'to_roomy', op, discord_id, NULL, NULL,
+               mapping_kind, mapping_value, event_json, attempts, last_error,
+               first_failed_at, last_failed_at, next_retry_at, terminal
+        FROM failed_sends;
+
+        DROP TABLE failed_sends;
+        ALTER TABLE failed_sends_new RENAME TO failed_sends;
+        CREATE INDEX idx_failed_sends_due ON failed_sends (terminal, next_retry_at);
+        CREATE UNIQUE INDEX idx_failed_sends_to_roomy
+          ON failed_sends (space_did, op, discord_id) WHERE direction = 'to_roomy';
+        CREATE UNIQUE INDEX idx_failed_sends_to_discord
+          ON failed_sends (space_did, roomy_event_id) WHERE direction = 'to_discord';
+      `);
+		},
+	},
 ];
 
 export function runMigrations(db: Database): {

@@ -58,12 +58,16 @@ export class FileDiscordSender implements DiscordSender {
 	#threads: CreatedThread[] = [];
 	#getMessageError: string | undefined;
 	#botDeleteError: string | undefined;
+	#sendError: Error | undefined;
+	#sendAttempts = 0;
 
 	async sendMessage(
 		channelId: string,
 		content: string,
 		options?: SendMessageOptions,
 	): Promise<string> {
+		this.#sendAttempts++;
+		if (this.#sendError) throw this.#sendError;
 		const messageId = String(this.#nextId++);
 		this.#sent.push({ channelId, content, messageId, options });
 		return messageId;
@@ -165,6 +169,16 @@ export class FileDiscordSender implements DiscordSender {
 		this.#botDeleteError = message;
 	}
 
+	/** Make every message send reject — models a Discord REST failure. */
+	setSendError(error: Error | null): void {
+		this.#sendError = error ?? undefined;
+	}
+
+	/** Message sends attempted, including those that threw. */
+	get sendAttempts(): number {
+		return this.#sendAttempts;
+	}
+
 	/** Make message fetches reject — models a Discord REST failure (for tests). */
 	setGetMessageError(message: string): void {
 		this.#getMessageError = message;
@@ -204,5 +218,7 @@ export class FileDiscordSender implements DiscordSender {
 		this.#reactionsAdded = [];
 		this.#reactionsRemoved = [];
 		this.#threads = [];
+		this.#sendError = undefined;
+		this.#sendAttempts = 0;
 	}
 }
