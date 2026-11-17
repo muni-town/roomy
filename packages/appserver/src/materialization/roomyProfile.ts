@@ -17,7 +17,7 @@ import { AtpAgent } from "@atproto/api";
 import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import { resolvePdsEndpoint } from "../identity.ts";
 import type { UserDid } from "@roomy-space/sdk";
-import type { HappyViewConfig } from "../happyview.ts";
+import { happyViewHeaders, type HappyViewConfig } from "../happyview.ts";
 import { fetchWithTimeout, profileFetchTimeoutMs } from "../fetchTimeout.ts";
 import { log } from "../log.ts";
 
@@ -136,11 +136,7 @@ export async function getProfilesFromHappyView(
     try {
       const params = new URLSearchParams();
       params.set("actors", chunk.join(","));
-      const headers: Record<string, string> = {
-      };
-      if (config.clientSecret) {
-        headers["X-Client-Secret"] = config.clientSecret;
-      }
+      const headers = happyViewHeaders(config);
       const resp = await fetchWithTimeout(
         `${config.endpoint}/xrpc/space.roomy.user.getProfiles?${params.toString()}`,
         { headers },
@@ -184,12 +180,7 @@ export async function getProfileFromHappyView(
   config: HappyViewConfig,
 ): Promise<HappyViewProfile | null> {
   try {
-    const headers: Record<string, string> = {
-      "X-Client-Key": config.clientKey,
-    };
-    if (config.clientSecret) {
-      headers["X-Client-Secret"] = config.clientSecret;
-    }
+    const headers = happyViewHeaders(config);
     const resp = await fetchWithTimeout(
       `${config.endpoint}/xrpc/space.roomy.user.getProfiles?actors=${encodeURIComponent(did)}`,
       { headers },

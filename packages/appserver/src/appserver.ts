@@ -113,7 +113,13 @@ import {
 import { startSearchIndexer, stopSearchIndexer, searchIndexerStats } from "./search/indexer.ts";
 import { startSearchBackfill, stopSearchBackfill, searchBackfillStats } from "./search/backfill.ts";
 import { schemas, type UserDid } from "@roomy-space/sdk";
-import { initHappyView, setHappyView, type HappyViewConfig } from "./happyview.ts";
+import {
+  initHappyView,
+  setHappyView,
+  getHappyView,
+  logHappyViewStartup,
+  type HappyViewConfig,
+} from "./happyview.ts";
 import { initQdrant } from "./qdrant.ts";
 import { initPolar } from "./billing/polar.ts";
 import {
@@ -685,6 +691,7 @@ export async function createAppserver(
   // HappyView is explicitly disabled.
   if (opts.happyView === undefined) initHappyView();
   else setHappyView(opts.happyView);
+  logHappyViewStartup(getHappyView());
 
   // ─── LiveKit config ─────────────────────────────────────────────────
   // Process-wide singleton, like HappyView. Unconfigured is a supported

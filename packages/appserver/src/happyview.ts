@@ -26,6 +26,8 @@
  * opens the DB directly). Mirrors the `openDb`/`getDb` singleton pattern.
  */
 
+import { log } from "./log.ts";
+
 /**
  * Configuration for connecting to a HappyView profile index service.
  *
@@ -61,6 +63,41 @@ export function getHappyViewConfig(): HappyViewConfig | null {
     clientKey,
     clientSecret,
   };
+}
+
+/**
+ * Headers for a HappyView XRPC request.
+ *
+ * HappyView requires the client key on every request; the secret is optional
+ * and only used for server-to-server callers. One helper so the batch and
+ * single-DID paths cannot disagree about what they send.
+ */
+export function happyViewHeaders(
+  config: HappyViewConfig,
+): Record<string, string> {
+  const headers: Record<string, string> = { "X-Client-Key": config.clientKey };
+  if (config.clientSecret) headers["X-Client-Secret"] = config.clientSecret;
+  return headers;
+}
+
+
+/**
+ * Emit the one startup line that says whether the HappyView profile pipeline
+ * is on. Without it, a deployment where HappyView is disabled is
+ * indistinguishable from one where every request is rejected.
+ */
+export function logHappyViewStartup(config: HappyViewConfig | null): void {
+  if (!config) {
+    log.info("[happyview] profile pipeline disabled");
+    return;
+  }
+  let host = "(invalid endpoint)";
+  try {
+    host = new URL(config.endpoint).host;
+  } catch {
+    // A malformed endpoint is still configuration worth reporting.
+  }
+  log.info(`[happyview] profile pipeline enabled (endpoint host: ${host})`);
 }
 
 // ─── Process-wide singleton ───────────────────────────────────────────────
