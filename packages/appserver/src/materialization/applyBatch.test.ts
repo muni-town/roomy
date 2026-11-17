@@ -17,7 +17,7 @@ import type { SQLQueryBindings } from "bun:sqlite";
 
 import { toAsyncDb } from "../db/syncAdapter.ts";
 import { closeDb, openDb, openReadStateDb } from "../db/db.ts";
-import { applyBatch } from "./applyBatch.ts";
+import { applyBatch, NO_KIND } from "./applyBatch.ts";
 import { applyBundle } from "./applyBundle.ts";
 import type { LoggedEvent, StatementBundleSuccess } from "./types.ts";
 import { selectMessages } from "../queries/selectMessages.ts";
@@ -203,29 +203,43 @@ describe("applyBatch", () => {
     expect(doneLine.applyErrors).toBe(0);
   })
 
-  test("counts materialiser errors without aborting the batch", async () => {
+  test("counts skipped entries apart from errors, by kind", async () => {
     const { db, asyncDb } = freshDb();
     seedSpace(db, STREAM);
 
     const ok = createRoomEvent("ok");
-    const bad = {
+    // A kind this build has no materialiser for.
+    const unregistered = {
       $type: "space.roomy.this.does.not.exist.v0",
       id: newUlid(),
-    } as unknown as Event;
+    };
+    // A payload that decoded to a map with no `$type` at all — a legacy or
+    // foreign encoding, not an unknown kind.
+    const undecodable = { id: newUlid(), name: "legacy-room" };
     const ok2 = createRoomEvent("ok2");
 
     const stats = await applyBatch(
       asyncDb,
       STREAM,
-      [decoded(ok, 1), decoded(bad, 2), decoded(ok2, 3)],
+      [
+        decoded(ok, 1),
+        decoded(unregistered as unknown as Event, 2),
+        decoded(undecodable as unknown as Event, 3),
+        decoded(ok2, 4),
+      ],
       { isBackfill: true },
     );
 
     expect(stats.applied).toBe(2);
-    expect(stats.materializerErrors).toBe(1);
+    expect(stats.skipped).toBe(2);
+    expect(stats.undecodable).toBe(1);
+    expect(stats.skippedKinds).toEqual({
+      "space.roomy.this.does.not.exist.v0": 1,
+      [NO_KIND]: 1,
+    });
+    expect(stats.materializerErrors).toBe(0);
     expect(stats.applyErrors).toBe(0);
-    expect(stats.failed).toHaveLength(1);
-    expect(stats.failed[0]?.reason).toBe("materializer");
+    expect(stats.failed).toHaveLength(0);
 
     expect(
       (await asyncDb
@@ -233,14 +247,13 @@ describe("applyBatch", () => {
         .get<{ count: number }>())?.count,
     ).toBe(2);
 
-    // Cursor advances to the highest idx in the batch even though one event
-    // failed — the failure is tracked, but we have no reason to stay stuck
-    // on a permanently-broken event.
+    // The cursor advances to the highest idx in the batch, skipped entries
+    // included: replay does not stay stuck on an entry nothing can read.
     expect(
       (await asyncDb
         .query("select backfilled_to from comp_space where entity = ?")
         .get<{ backfilled_to: number }>(STREAM))?.backfilled_to,
-    ).toBe(3);
+    ).toBe(4);
   })
 
   test("backfilled_to never moves backwards", async () => {

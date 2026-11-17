@@ -29,14 +29,35 @@ export interface StatementBundleSuccess {
   dependsOn: Ulid[];
 }
 
-/** Materialiser threw — typically an unknown event type or a schema error. */
+/** Materialiser threw — typically a malformed payload for a known event type. */
 export interface StatementBundleError {
   status: "error";
   eventId: Ulid;
   message: string;
 }
 
-export type StatementBundle = StatementBundleSuccess | StatementBundleError;
+/**
+ * An entry the batch applied nothing for, and did not fail on. Two cases,
+ * counted apart because they mean different things:
+ *
+ * - `undecodable`: the payload decoded but carries no `$type`, so the event's
+ *   kind is unknown. Typically a legacy or foreign event encoding rather than
+ *   a corrupt row; the replayer reports it with the payload's byte length.
+ * - `unregistered`: the event names a kind this build has no materialiser for.
+ */
+export interface StatementBundleSkip {
+  status: "skip";
+  /** The event's ULID, when the decoded payload carries one. */
+  eventId: Ulid | null;
+  reason: "undecodable" | "unregistered";
+  /** The decoded `$type`, or `null` when the payload carries none. */
+  kind: string | null;
+}
+
+export type StatementBundle =
+  | StatementBundleSuccess
+  | StatementBundleError
+  | StatementBundleSkip;
 
 /** Per-event apply outcomes after the SQL has been (or hasn't been) executed. */
 export type ApplyOutcome =

@@ -456,8 +456,15 @@ export async function reMaterializeFromLocalEvents(
     `re-materializing ${toReplay.length} streams from local events DB (${skipped} already up to date)`,
   );
 
+  // A replayed stream lands in exactly one bucket: `succeeded` when every entry
+  // reached the space, `incomplete` when the replay ran but some entries were
+  // skipped or failed to apply, `failed` when the stream itself threw. An
+  // incomplete stream is not a success: it left events behind.
   let succeeded = 0;
+  let incomplete = 0;
   let failed = 0;
+  /** Distinct skipped kinds across every replayed stream, with event counts. */
+  const skippedKinds: Record<string, number> = {};
   const total = toReplay.length;
   const cap = Math.max(1, Math.min(Math.floor(concurrency), total));
 
@@ -473,6 +480,7 @@ export async function reMaterializeFromLocalEvents(
       const idx = nextIndex.i++;
       if (idx >= total) return;
       const { streamId: streamDid, fromIdx, rebuild } = toReplay[idx]!;
+      let streamIncomplete = false;
       try {
         // The DNS handle and the enriched link metadata live in the global
         // store, not the per-space DB, so a rebuild must carry them across
@@ -508,13 +516,35 @@ export async function reMaterializeFromLocalEvents(
 
         if (rawEvents.length > 0) {
           const decodedEvents: LoggedEvent[] = rawEvents.map(
-            (e): LoggedEvent => ({
-              idx: e.idx as StreamIndex,
-              event: decode(e.payload) as Event,
-              user: e.user as UserDid,
-              receivedAt: e.received_at ?? undefined,
-              createdAt: e.created_at ?? undefined,
-            }),
+            (e): LoggedEvent => {
+              const event = decode(e.payload) as Event;
+              // A payload that decodes but names no kind cannot be
+              // materialised. The batch counts it as a skip rather than
+              // failing the stream, so this is the only place the row is
+              // reported — and the one place the payload's size is known,
+              // which is what tells a legacy or foreign encoding apart from
+              // a truncated row.
+              const rawKind: unknown = event.$type;
+              if (typeof rawKind !== "string") {
+                const rawId: unknown = event.id;
+                log.warn(
+                  "[re-materialize] event skipped: payload decodes with no $type (legacy or foreign encoding?)",
+                  {
+                    streamId: streamDid,
+                    idx: e.idx,
+                    eventId: typeof rawId === "string" ? rawId : null,
+                    payloadBytes: e.payload.length,
+                  },
+                );
+              }
+              return {
+                idx: e.idx as StreamIndex,
+                event,
+                user: e.user as UserDid,
+                receivedAt: e.received_at ?? undefined,
+                createdAt: e.created_at ?? undefined,
+              };
+            },
           );
 
           const globalDb = db.global?.();
@@ -528,10 +558,22 @@ export async function reMaterializeFromLocalEvents(
             globalDb,
           );
 
-          if (stats.materializerErrors > 0 || stats.applyErrors > 0) {
+          // A stream counts as done only when every entry it replayed reached
+          // the space. Skipped entries are not failures (nothing threw), but
+          // they are not applications either, so they keep the stream out of
+          // `succeeded` and are named here.
+          const unapplied =
+            stats.materializerErrors + stats.applyErrors + stats.skipped;
+          for (const [kind, count] of Object.entries(stats.skippedKinds)) {
+            skippedKinds[kind] = (skippedKinds[kind] ?? 0) + count;
+          }
+          if (unapplied > 0) {
+            streamIncomplete = true;
             log.warn("[re-materialize] stream-done", {
               streamId: streamDid,
               applied: stats.applied,
+              skipped: stats.skipped,
+              skippedKinds: stats.skippedKinds,
               materializerErrors: stats.materializerErrors,
               applyErrors: stats.applyErrors,
               rebuild,
@@ -540,6 +582,8 @@ export async function reMaterializeFromLocalEvents(
             log.info("[re-materialize] stream-done", {
               streamId: streamDid,
               applied: stats.applied,
+              skipped: 0,
+              skippedKinds: {},
               materializerErrors: 0,
               applyErrors: 0,
               rebuild,
@@ -552,7 +596,8 @@ export async function reMaterializeFromLocalEvents(
           // routing flips. The cursor was advanced by applyBatch.
           await db.spaceRebuildCommit!(streamDid as StreamDid);
         }
-        succeeded++;
+        if (streamIncomplete) incomplete++;
+        else succeeded++;
       } catch (err) {
         if (rebuild) {
           // Never swap in a broken/partial DB — abort and keep serving the
@@ -570,13 +615,14 @@ export async function reMaterializeFromLocalEvents(
         );
       }
 
-      if ((succeeded + failed) % 25 === 0 || succeeded + failed === total) {
-        const pct = Math.round(((succeeded + failed) / total) * 100);
+      const done = succeeded + incomplete + failed;
+      if (done % 25 === 0 || done === total) {
         log.info("[re-materialize] progress", {
-          done: succeeded + failed,
+          done,
           total,
-          pct,
+          pct: Math.round((done / total) * 100),
           succeeded,
+          incomplete,
           failed,
         });
       }
@@ -601,5 +647,13 @@ export async function reMaterializeFromLocalEvents(
 
   await finishStartupMigrations();
 
-  log.info("[re-materialize] complete", { succeeded, failed });
+  const summary = {
+    succeeded,
+    incomplete,
+    failed,
+    skipped: Object.values(skippedKinds).reduce((sum, n) => sum + n, 0),
+    skippedKinds,
+  };
+  if (incomplete > 0 || failed > 0) log.warn("[re-materialize] complete", summary);
+  else log.info("[re-materialize] complete", summary);
 }

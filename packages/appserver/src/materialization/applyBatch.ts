@@ -92,6 +92,20 @@ const MEMBERSHIP_EVENT_TYPES: ReadonlySet<string> = new Set([
 
 export interface MaterializationStats {
   applied: number;
+  /**
+   * Entries the batch applied nothing for and did not fail on: payloads that
+   * decoded without a `$type` (`undecodable`) plus kinds this build has no
+   * materialiser for. A non-zero count means the batch's result is incomplete
+   * even though nothing threw.
+   */
+  skipped: number;
+  /** The subset of `skipped` whose decoded payload carried no `$type`. */
+  undecodable: number;
+  /**
+   * Distinct skipped kinds with their event counts. Undecodable payloads are
+   * keyed `"<no $type>"`, since the payload never named one.
+   */
+  skippedKinds: Record<string, number>;
   materializerErrors: number;
   applyErrors: number;
   failed: Array<{
@@ -102,6 +116,9 @@ export interface MaterializationStats {
   }>;
   detectedLinks: string[];
 }
+
+/** Key `skippedKinds` uses for a payload that decoded without a `$type`. */
+export const NO_KIND = "<no $type>";
 
 interface ChunkStep {
   type: "run" | "exec";
@@ -120,6 +137,9 @@ export async function applyBatch(
 ): Promise<MaterializationStats> {
   const stats: MaterializationStats = {
     applied: 0,
+    skipped: 0,
+    undecodable: 0,
+    skippedKinds: {},
     materializerErrors: 0,
     applyErrors: 0,
     failed: [],
@@ -136,6 +156,28 @@ export async function applyBatch(
   const total = events.length;
   const logInterval = Math.max(500, Math.round(total / 10));
   let nextLogAt = logInterval;
+
+  // Structured progress telemetry (Loki): one line per ~10% of the batch.
+  // Query in Grafana with `{scope="materialize"} | json | unwrap applied`.
+  // Skipped entries count as done — they consume the batch without being
+  // applied or failing — so `applied` alone never implies the batch finished.
+  const logProgress = (): void => {
+    const done =
+      stats.applied + stats.materializerErrors + stats.applyErrors + stats.skipped;
+    if (done < nextLogAt || done >= total) return;
+    nextLogAt = done + logInterval;
+    log.info("[materialize] progress", {
+      streamId,
+      done,
+      total,
+      pct: Math.round((done / total) * 100),
+      applied: stats.applied,
+      skipped: stats.skipped,
+      materializerErrors: stats.materializerErrors,
+      applyErrors: stats.applyErrors,
+      isBackfill: opts.isBackfill,
+    });
+  };
 
   // Process events in chunks, each chunk in one transaction
   for (let offset = 0; offset < events.length; offset += CHUNK_SIZE) {
@@ -217,6 +259,19 @@ export async function applyBatch(
               bundle: materialised,
             });
           }
+          continue;
+        }
+
+        // Nothing to run: either the payload named no kind at all, or it named
+        // one this build has no materialiser for. Neither is a failure, but
+        // neither is an application either — the run summary separates the two
+        // kinds so a replay that applied nothing cannot report success.
+        if (materialised.status === "skip") {
+          const key = materialised.kind ?? NO_KIND;
+          stats.skipped++;
+          if (materialised.reason === "undecodable") stats.undecodable++;
+          stats.skippedKinds[key] = (stats.skippedKinds[key] ?? 0) + 1;
+          logProgress();
           continue;
         }
 
@@ -306,24 +361,7 @@ export async function applyBatch(
         });
       }
 
-      const done = stats.applied + stats.materializerErrors + stats.applyErrors;
-      if (done >= nextLogAt && done < total) {
-        nextLogAt = done + logInterval;
-        const pct = Math.round((done / total) * 100);
-        // Structured progress telemetry (Loki): one line per ~10% of the
-        // batch. Query in Grafana with
-        // `{scope="materialize"} | json | unwrap applied`.
-        log.info("[materialize] progress", {
-          streamId,
-          done,
-          total,
-          pct,
-          applied: stats.applied,
-          materializerErrors: stats.materializerErrors,
-          applyErrors: stats.applyErrors,
-          isBackfill: opts.isBackfill,
-        });
-      }
+      logProgress();
     }
 
     // Capture the chunk's delete targets (the rooms whose windows must be
@@ -583,6 +621,9 @@ export async function applyBatch(
     streamId,
     total,
     applied: stats.applied,
+    skipped: stats.skipped,
+    undecodable: stats.undecodable,
+    skippedKinds: stats.skippedKinds,
     materializerErrors: stats.materializerErrors,
     applyErrors: stats.applyErrors,
     isBackfill: opts.isBackfill,

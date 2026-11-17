@@ -9,7 +9,9 @@
 
 import {
   type Event,
+  type EventType,
   type StreamIndex,
+  type Ulid,
   getDependsOn,
   getMaterializer,
 } from "@roomy-space/sdk";
@@ -27,16 +29,37 @@ export function materialize(
   opts: MaterializeOpts,
   idx: StreamIndex,
 ): StatementBundle {
-  const kind = event.$type;
+  // A decoded payload that carries no `$type` never named a kind: that is a
+  // decode failure, not an unknown kind, and the caller decides how loudly to
+  // report it (the replayer knows the payload's length, which is the detail
+  // that tells a legacy encoding apart from a truncated row). `event` is a
+  // raw CBOR decode, so the fields are checked rather than assumed.
+  const rawKind: unknown = event.$type;
+  const rawId: unknown = event.id;
+  const kind = typeof rawKind === "string" ? rawKind : null;
+  const eventId = typeof rawId === "string" ? (rawId as Ulid) : null;
+
+  if (kind === null) {
+    log.debug(
+      `[materialize] event ${eventId ?? "<no id>"} carries no $type — no materialiser to run`,
+    );
+    return {
+      status: "skip",
+      eventId,
+      reason: "undecodable",
+      kind: null,
+    };
+  }
 
   // Check if we have a materializer for this event type before attempting
-  const handler = getMaterializer(kind);
+  const handler = getMaterializer(kind as EventType);
   if (!handler) {
-    log.warn(`[materialize] no materializer for event ${event.id} (kind: ${kind}) — skipping`);
+    log.warn(`[materialize] no materializer for event ${eventId} (kind: ${kind}) — skipping`);
     return {
-      status: "error",
-      eventId: event.id,
-      message: `No materializer found for event kind: ${kind}`,
+      status: "skip",
+      eventId,
+      reason: "unregistered",
+      kind,
     };
   }
 
@@ -61,10 +84,10 @@ export function materialize(
     } satisfies StatementBundleSuccess;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    log.error(`[materialize] failed for event ${event.id} (${kind}): ${message}`);
+    log.error(`[materialize] failed for event ${eventId} (${kind}): ${message}`);
     return {
       status: "error",
-      eventId: event.id,
+      eventId: eventId ?? ("" as Ulid),
       message,
     };
   }

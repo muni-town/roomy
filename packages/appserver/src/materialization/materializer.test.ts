@@ -37,7 +37,7 @@ describe("materialize", () => {
     expect(Array.isArray(bundle.dependsOn)).toBe(true);
   });
 
-  test("returns an error bundle for an unknown event type", () => {
+  test("skips an event whose kind this build has no materialiser for", () => {
     const id = newUlid();
     const event = {
       $type: "space.roomy.this.does.not.exist.v0",
@@ -50,10 +50,30 @@ describe("materialize", () => {
       1 as StreamIndex,
     );
 
-    expect(bundle.status).toBe("error");
-    if (bundle.status !== "error") return;
+    expect(bundle.status).toBe("skip");
+    if (bundle.status !== "skip") return;
+    expect(bundle.reason).toBe("unregistered");
+    expect(bundle.kind).toBe("space.roomy.this.does.not.exist.v0");
     expect(bundle.eventId).toBe(id);
-    expect(bundle.message).toMatch(/No materializer found/);
+  });
+
+  test("skips a payload that decoded without a $type as a decode failure", () => {
+    // What a legacy or foreign event encoding decodes to: a CBOR map with the
+    // event's own fields and no `$type`.
+    const id = newUlid();
+    const event = { id, name: "legacy-room" };
+
+    const bundle = materialize(
+      event as unknown as Event,
+      { streamId: STREAM, user: USER },
+      1 as StreamIndex,
+    );
+
+    expect(bundle.status).toBe("skip");
+    if (bundle.status !== "skip") return;
+    expect(bundle.reason).toBe("undecodable");
+    expect(bundle.kind).toBeNull();
+    expect(bundle.eventId).toBe(id);
   });
 
   test("dependsOn is populated for events that declare dependencies", () => {

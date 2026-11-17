@@ -22,7 +22,8 @@ import {
 import { closeDb, openDb } from "../db/db.ts";
 import { _resetEmbedSweeper } from "../embed/sweeper.ts";
 import { reMaterializeFromLocalEvents } from "./reMaterialize.ts";
-import { applyBatch } from "../materialization/applyBatch.ts";
+import { applyBatch, NO_KIND } from "../materialization/applyBatch.ts";
+import { _setLokiSink } from "../log.ts";
 import type { DbLike } from "../db/types.ts";
 
 const ADMIN = UserDid.assert("did:plc:test-admin");
@@ -86,6 +87,54 @@ function makeRoomEvents(count: number): Record<string, unknown>[] {
     });
   }
   return events;
+}
+
+/**
+ * Capture the records this replay emits through the logger's own Loki sink —
+ * the same record an operator reads in Grafana. The level is raised to `debug`
+ * for the duration, because a record below the threshold is dropped before
+ * either sink sees it; `restore()` puts the level back so no test leaks state
+ * into the next.
+ */
+function captureLogs() {
+  const records: Record<string, unknown>[] = [];
+  const previousLevel = process.env.LOG_LEVEL;
+  process.env.LOG_LEVEL = "debug";
+  _setLokiSink({
+    push: (r) => {
+      const parsed: unknown = JSON.parse(r.line);
+      if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+        records.push(parsed as Record<string, unknown>);
+      }
+    },
+    flush: async () => {},
+    stop: () => {},
+    stats: () => ({ queued: 0, sent: 0, dropped: 0, failed: 0 }),
+  });
+  return {
+    /** The records at `level` whose message contains `msg`. */
+    record(level: string, msg: string): Record<string, unknown>[] {
+      return records.filter((r) => {
+        const message: unknown = r.msg;
+        return (
+          r.level === level &&
+          typeof message === "string" &&
+          message.includes(msg)
+        );
+      });
+    },
+    restore(): void {
+      _setLokiSink(null);
+      if (previousLevel === undefined) delete process.env.LOG_LEVEL;
+      else process.env.LOG_LEVEL = previousLevel;
+    },
+  };
+}
+
+/** The keys of a logged count map, without trusting its shape. */
+function loggedKeys(value: unknown): string[] {
+  if (value === null || typeof value !== "object") return [];
+  return Object.keys(value);
 }
 
 /**
@@ -660,6 +709,104 @@ describe("reMaterializeFromLocalEvents", () => {
     // stream replay AND that the cap (not the pool) bounded the concurrency.
     expect(maxActive).toBeGreaterThanOrEqual(2);
     expect(maxActive).toBeLessThanOrEqual(2);
+  }, { timeout: 30_000 });
+
+  test("reports skipped entries by kind and does not count the stream as succeeded", async () => {
+    const streamDid = StreamDid.assert("did:web:skips.example");
+    const space = db.forSpace!(streamDid);
+    const legacyId = newUlid();
+    const unregistered = "space.roomy.this.does.not.exist.v0";
+
+    await seedEvents(db, streamDid, [
+      // Applies.
+      {
+        $type: "space.roomy.room.createRoom.v0",
+        id: newUlid(),
+        kind: "space.roomy.channel",
+        name: "general",
+      },
+      // Decodes to a map with no `$type`: a legacy/foreign event encoding.
+      { id: legacyId, name: "legacy-room" },
+      // Names a kind this build cannot materialise.
+      { $type: unregistered, id: newUlid() },
+    ]);
+
+    const logs = captureLogs();
+    try {
+      await reMaterializeFromLocalEvents(db);
+    } finally {
+      logs.restore();
+    }
+
+    // The undecodable payload is reported where its size is known.
+    const undecodable = logs.record(
+      "warn",
+      "event skipped: payload decodes with no $type",
+    );
+    expect(undecodable).toHaveLength(1);
+    expect(undecodable[0]?.eventId).toBe(legacyId);
+    expect(typeof undecodable[0]?.payloadBytes).toBe("number");
+    expect(undecodable[0]?.payloadBytes).toBeGreaterThan(0);
+
+    // The per-stream line names every distinct kind it skipped.
+    const streamDone = logs.record("warn", "stream-done");
+    expect(streamDone).toHaveLength(1);
+    expect(streamDone[0]?.applied).toBe(1);
+    expect(streamDone[0]?.skipped).toBe(2);
+    expect(loggedKeys(streamDone[0]?.skippedKinds).sort()).toEqual(
+      [NO_KIND, unregistered].sort(),
+    );
+
+    // The run summary: the stream replayed, but it did not succeed.
+    const complete = logs.record("warn", "complete");
+    expect(complete).toHaveLength(1);
+    expect(complete[0]).toMatchObject({
+      succeeded: 0,
+      incomplete: 1,
+      failed: 0,
+      skipped: 2,
+      skippedKinds: { [NO_KIND]: 1, [unregistered]: 1 },
+    });
+
+    // Cursor policy is unchanged: the entries nothing could read do not hold
+    // the stream back.
+    const cursor = await space
+      .query(
+        "select materialized_to from materialization_cursor where stream_id = ?",
+      )
+      .get<{ materialized_to: number }>(streamDid);
+    expect(cursor?.materialized_to).toBe(2);
+  }, { timeout: 30_000 });
+
+  test("a boot replaying only legacy payloads completes, naming the kind", async () => {
+    const streamDid = StreamDid.assert("did:web:all-legacy.example");
+
+    await seedEvents(db, streamDid, [
+      { id: newUlid(), name: "legacy-a" },
+      { id: newUlid(), name: "legacy-b" },
+    ]);
+
+    const logs = captureLogs();
+    try {
+      await reMaterializeFromLocalEvents(db);
+    } finally {
+      logs.restore();
+    }
+
+    // One warn per undecodable payload, plus the per-stream and run summaries.
+    expect(
+      logs.record("warn", "event skipped: payload decodes with no $type"),
+    ).toHaveLength(2);
+
+    const complete = logs.record("warn", "complete");
+    expect(complete).toHaveLength(1);
+    expect(complete[0]).toMatchObject({
+      succeeded: 0,
+      incomplete: 1,
+      failed: 0,
+      skipped: 2,
+      skippedKinds: { [NO_KIND]: 2 },
+    });
   }, { timeout: 30_000 });
 
 });

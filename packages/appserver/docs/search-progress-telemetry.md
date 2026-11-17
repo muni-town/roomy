@@ -10,11 +10,11 @@ No extra infrastructure is required — query them directly in Grafana.
 | Scope (`scope` label) | `msg` | Emitted | Key fields |
 |---|---|---|---|
 | `search-backfill` | `progress` | once per sweeper cycle (~60s) | `spaceDid`, `cursor`, `rows`, `indexed`, `backfilled`, `errorCount`, `dbBackoffActive` |
-| `materialize` | `progress` | every ~10% of a batch (min every 500 events) | `streamId`, `done`, `total`, `pct`, `applied`, `materializerErrors`, `applyErrors`, `isBackfill` |
-| `materialize` | `done` | once per batch | `streamId`, `total`, `applied`, `materializerErrors`, `applyErrors`, `isBackfill` |
-| `re-materialize` | `stream-done` | once per stream at boot | `streamId`, `applied`, `materializerErrors`, `applyErrors`, `rebuild` |
-| `re-materialize` | `progress` | every 25 streams at boot | `done`, `total`, `pct`, `succeeded`, `failed` |
-| `re-materialize` | `complete` | once per boot | `succeeded`, `failed` |
+| `materialize` | `progress` | every ~10% of a batch (min every 500 events) | `streamId`, `done`, `total`, `pct`, `applied`, `skipped`, `materializerErrors`, `applyErrors`, `isBackfill` |
+| `materialize` | `done` | once per batch | `streamId`, `total`, `applied`, `skipped`, `undecodable`, `skippedKinds`, `materializerErrors`, `applyErrors`, `isBackfill` |
+| `re-materialize` | `stream-done` | once per stream at boot | `streamId`, `applied`, `skipped`, `skippedKinds`, `materializerErrors`, `applyErrors`, `rebuild` |
+| `re-materialize` | `progress` | every 25 streams at boot | `done`, `total`, `pct`, `succeeded`, `incomplete`, `failed` |
+| `re-materialize` | `complete` | once per boot | `succeeded`, `incomplete`, `failed`, `skipped`, `skippedKinds` |
 
 Every record carries the standard fields `ts`, `level`, `scope`, `msg`,
 `build_id`, `service`, plus `replica_id`/`railway_service_name` labels when
@@ -24,6 +24,28 @@ running on Railway.
 `indexedOk` are process-local — they reset to 0 on every deploy. The sweeper's
 `cursor` and the materialiser's `applied`/`done` totals are backed by
 persistent DB state, so they are the cross-restart progress signals.
+
+### What the boot summary counts
+
+A replayed stream lands in exactly one bucket:
+
+| Field | Meaning |
+|---|---|
+| `succeeded` | every entry it replayed reached the space |
+| `incomplete` | the replay ran, but some entries were skipped or failed to apply |
+| `failed` | the stream itself threw (its replay is retried on the next boot) |
+
+`skipped` counts entries nothing was applied for and nothing failed on, broken
+down by the distinct kind in `skippedKinds`:
+
+- `"<no $type>"` — the payload decoded but carries no `$type`, so it names no
+  kind at all. A legacy or foreign event encoding rather than a corrupt row;
+  each one is also reported at `warn` with its `eventId` and `payloadBytes`.
+- any other key — a kind this build has no materialiser for.
+
+An `incomplete` stream is not a success: it is a replay that left events
+behind. The cursor still advances past them (replaying an unreadable entry
+forever would stall the space), so they are visible only in this summary.
 
 ## Grafana timeseries panels
 
