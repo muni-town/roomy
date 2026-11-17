@@ -260,30 +260,84 @@ describe("XrpcRouter error attribution", () => {
     }
   });
 
-  test("a request that fails before auth logs no identity fields", async () => {
+  /** A router for one query route that always fails, never authenticating. */
+  function failing(handler: () => never): XrpcRouter {
+    return new XrpcRouter(async () => ({ did: null })).query("test.query", {
+      handler,
+    });
+  }
+
+  test("an anonymous 401 logs the credential's shape and the caller's User-Agent", async () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
-      const router = new XrpcRouter(async () => ({ did: null })).query(
-        "test.query",
-        {
-          handler: async () => {
-            throw new XrpcError(401, "AuthRequired", "Authentication required");
-          },
-        },
-      );
+      const router = failing(() => {
+        throw new XrpcError(401, "AuthRequired", "Authentication required");
+      });
 
-      const res = await call(
-        router,
-        "http://x/xrpc/test.query?spaceId=did:plc:spaceone",
-      );
+      const res = await call(router, "http://x/xrpc/test.query?spaceId=did:plc:spaceone", {
+        headers: { "user-agent": "curl/8.5.0" },
+      });
       expect(res.status).toBe(401);
 
       const record = xrpcErrors(spy)[0]!;
       expect(record["msg"]).toBe(
         "GET /xrpc/test.query failed: Authentication required",
       );
+      // The 401 says nothing about whether a credential was offered; the log
+      // line has to, or the caller cannot be told apart from a broken client.
+      expect(record["auth_header"]).toBe("none");
+      expect(record["client"]).toBe("curl/8.5.0");
+      // Identity is still an authenticated-caller field only: this request is
+      // anonymous, so the spaceId it named is unverified text and is dropped.
       expect("did" in record).toBe(false);
       expect("spaceId" in record).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test("a rejected credential is logged as offered, and other schemes distinctly", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const router = failing(() => {
+        throw new XrpcError(401, "InvalidToken", "invalid token");
+      });
+
+      await call(router, "http://x/xrpc/test.query", {
+        headers: { authorization: "Bearer abc.def.ghi", "user-agent": "Mozilla/5.0" },
+      });
+      await call(router, "http://x/xrpc/test.query", {
+        headers: { authorization: "Basic dXNlcg==" },
+      });
+
+      const [bearer, basic, ...rest] = xrpcErrors(spy);
+      expect(rest).toHaveLength(0);
+      expect(bearer).toMatchObject({
+        auth_header: "bearer",
+        client: "Mozilla/5.0",
+      });
+      expect(basic).toMatchObject({ auth_header: "other", client: "none" });
+      // Never the credential itself.
+      expect(JSON.stringify(bearer)).not.toContain("abc.def.ghi");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test("the caller label is printable and bounded", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const router = failing(() => {
+        throw new XrpcError(401, "AuthRequired", "Authentication required");
+      });
+
+      await call(router, "http://x/xrpc/test.query", {
+        headers: { "user-agent": `probe\u001b[31m ${"x".repeat(200)}` },
+      });
+
+      const client = xrpcErrors(spy)[0]!["client"] as string;
+      expect(client.startsWith("probe[31m ")).toBe(true);
+      expect(client).toHaveLength(64);
     } finally {
       spy.mockRestore();
     }

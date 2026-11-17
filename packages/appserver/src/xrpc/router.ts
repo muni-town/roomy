@@ -56,16 +56,53 @@ function validateOrReject(
 }
 
 /**
- * Identity of a failed request, filled in from values the router already
- * holds: the verified caller and the `spaceId` the request named. Both are
- * public identifiers — nothing else from the auth context, the body, or the
- * headers is kept. Fields are only ever added, never set to `undefined`, so
- * the error line of a request that failed before auth carries no identity
- * keys at all.
+ * What the error line records about a failed request. `auth_header` and
+ * `client` describe the *request*, so they are filled in before auth runs and
+ * appear on every failure — including the anonymous ones, which is the case
+ * no other field can explain. `did` and `spaceId` are identity claims and are
+ * recorded only once the caller has proven one (see `recordIdentity`).
+ *
+ * Both public identifiers and client-declared text, nothing secret: no header
+ * value, credential, body field, or query parameter beyond a DID-shaped
+ * `spaceId` is kept. Fields are only ever added, never set to `undefined`.
  */
 interface FailureIdentity {
   did?: string;
   spaceId?: string;
+  /** `bearer` — `Authorization: Bearer …` was offered; `other` — an
+   *  Authorization header under another scheme; `none` — no such header. */
+  auth_header?: "bearer" | "other" | "none";
+  /** The caller's User-Agent, printable and bounded, or `none` if absent. */
+  client?: string;
+}
+
+/** Longer labels are cut: this field exists to name a client, not to store
+ *  arbitrary text a caller chose. */
+const MAX_CLIENT_LABEL_LENGTH = 64;
+
+/**
+ * Whether a credential was offered, without keeping or recording it. A 401 is
+ * a different bug when the caller sent a token the server rejected than when
+ * it sent none, and the response says nothing about which happened.
+ */
+function authHeaderShape(req: Request): NonNullable<FailureIdentity["auth_header"]> {
+  const header = req.headers.get("authorization");
+  if (header === null || header.trim() === "") return "none";
+  return /^bearer\s+\S/i.test(header) ? "bearer" : "other";
+}
+
+/**
+ * The caller's User-Agent reduced to something safe to log: printable ASCII
+ * only, bounded, and `none` when absent or blank. The value is client-chosen,
+ * so it names a client class — a browser, `curl`, a monitor — rather than a
+ * person; for an unauthenticated request it is the only caller hint there is.
+ */
+function callerLabel(req: Request): string {
+  const ua = req.headers.get("user-agent");
+  if (ua === null) return "none";
+  const printable = ua.replace(/[^\x20-\x7e]/g, "").trim();
+  if (printable === "") return "none";
+  return printable.slice(0, MAX_CLIENT_LABEL_LENGTH);
 }
 
 const DID_PATTERN = /^did:[a-z]+:[A-Za-z0-9._:%-]+$/;
@@ -252,7 +289,14 @@ export class XrpcRouter {
         }
       }
 
-      const identity: FailureIdentity = {};
+      // Kept for the error line only. The credential's shape and the caller's
+      // self-declared User-Agent describe the request, not its subject, so
+      // they are recorded here — before auth — and survive a 401, which is
+      // precisely the failure that leaves nothing else about the caller.
+      const identity: FailureIdentity = {
+        auth_header: authHeaderShape(req),
+        client: callerLabel(req),
+      };
 
       try {
         if (route.kind === "query") {
