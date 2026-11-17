@@ -109,6 +109,7 @@ export function createCachePersistence(
         queryKey: query.queryKey,
         state: query.state,
         gcTime: query.options?.gcTime,
+        meta: query.meta,
       })),
     );
   }
@@ -178,6 +179,7 @@ export function createCachePersistence(
             queryKey: event.query.queryKey,
             state: event.query.state,
             gcTime: event.query.options?.gcTime,
+            meta: event.query.meta,
           })
         ) {
           scheduleSave();

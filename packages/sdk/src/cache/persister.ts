@@ -114,11 +114,17 @@ export interface PersistableQuery {
     dataUpdatedAt?: number;
   };
   gcTime?: number;
+  /**
+   * The query's `meta`, read only for the persistence opt-out below.
+   * TanStack merges an option object's `meta` onto the query, so an author
+   * writes `meta: { persist: false }` once, beside the rest of the options.
+   */
+  meta?: Record<string, unknown> | undefined;
 }
 
 /**
  * Which queries are persisted: success-status, non-error, non-`gcTime: 0`,
- * with a usable key and data.
+ * not opted out, with a usable key and data.
  *
  * Mutations are excluded structurally — this predicate takes queries, and
  * the mutation cache has nothing worth persisting (it exists only to
@@ -126,12 +132,20 @@ export interface PersistableQuery {
  * collects them the moment nothing observes them, so persisting them
  * would store what the cache is about to drop. Errors are excluded
  * because a stale error is strictly worse than no error.
+ *
+ * `meta.persist === false` is the opt-out for a query whose value is
+ * already inside another persisted entry — a per-id lookup seeded from a
+ * list, say. The snapshot is a count-capped set, so such entries compete
+ * with the lists they duplicate and are what the cap evicts them for.
+ * Only the literal `false` opts out: an absent `meta`, or one carrying
+ * unrelated keys, persists as before.
  */
 export function isPersistableQuery(query: PersistableQuery): boolean {
   if (query.state.status !== "success") return false;
   if (query.state.error != null) return false;
   if (query.state.data === undefined) return false;
   if (query.gcTime === 0) return false;
+  if (query.meta?.persist === false) return false;
 
   const key = query.queryKey;
   if (!Array.isArray(key) || key.length === 0) return false;

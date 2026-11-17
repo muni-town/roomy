@@ -8,6 +8,7 @@ import {
   isNonMessageReplyTarget,
   isRoomIndexKey,
 } from "$lib/queries/room-ids";
+import { MESSAGE_QUERY_META } from "$lib/queries/persist-policy";
 
 const { queryKey } = cache;
 
@@ -52,6 +53,11 @@ function roomIds(): ReadonlySet<string> {
  * on scroll and each recycle would otherwise be another request. With
  * `retryOnMount: false` the lookup is asked at most once per session instead
  * of once per mount.
+
+ * The lookup opts out of the persisted cache (`MESSAGE_QUERY_META` in
+ * `$lib/queries/persist-policy.ts`): one is created per rendered reply, and
+ * its value duplicates a row already inside the persisted `getMessages` page
+ * for the same room.
  */
 export function createMessageQuery(
   messageId: () => string,
@@ -84,6 +90,7 @@ export function createMessageQuery(
         px().query("space.roomy.message.getMessage", { messageId: target }),
       retry: false,
       retryOnMount: false,
+      meta: MESSAGE_QUERY_META,
       initialData: () => {
         if (!room) return undefined;
         const list = queryClient.getQueryData<MessageList>(

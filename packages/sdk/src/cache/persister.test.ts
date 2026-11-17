@@ -277,6 +277,22 @@ describe("the key set — which queries are persisted", () => {
     expect(selectPersistableEntries([query({ gcTime: 0 })])).toEqual([]);
   });
 
+  it("excludes a query that opted out with meta.persist: false", () => {
+    expect(isPersistableQuery(query({ meta: { persist: false } }))).toBe(false);
+    expect(
+      selectPersistableEntries([query({ meta: { persist: false } })]),
+    ).toEqual([]);
+  });
+
+  it("persists a query whose meta carries anything else", () => {
+    expect(isPersistableQuery(query({ meta: {} }))).toBe(true);
+    expect(isPersistableQuery(query({ meta: { persist: true } }))).toBe(true);
+    expect(isPersistableQuery(query({ meta: { persist: "no" } }))).toBe(true);
+    expect(isPersistableQuery(query({ meta: { source: "reply-context" } }))).toBe(
+      true,
+    );
+  });
+
   it("excludes a query with data undefined", () => {
     expect(
       isPersistableQuery(

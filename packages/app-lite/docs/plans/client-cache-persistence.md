@@ -441,6 +441,15 @@ is stated per-entry: the failure that matters is not "we lost the cache" (that i
   because the app already caches them deliberately (`routes/+layout.svelte:166-178`
   discusses the "Not authenticated" case) and a stale error is strictly worse
   than no error.
+- **The one per-query opt-out:** a query may set `meta: { persist: false }`,
+  which `isPersistableQuery` honours. The single-message lookup
+  (`space.roomy.message.getMessage`) uses it (`queries/persist-policy.ts`):
+  it is created once per rendered reply and its value is a row already inside
+  the persisted `room.getMessages` page, so persisted it would be the most
+  numerous kind in the set and, under the count cap, the one that evicts the
+  room lists and headers the snapshot exists to keep. The lookup stays
+  useful without persistence — it is seeded from the room list the client
+  already holds, so a restored list renders its reply previews from that page.
 - **`gcTime` is `Infinity` for the persisted set.** An in-memory entry the cache
   collects is one the next snapshot omits, so collecting an unobserved entry
   discards the room the user was not looking at — which is the set persistence
@@ -689,7 +698,8 @@ Decision-shaped, with the plan's recommendation where it has one. Questions
 1, 3, 4 and 6 were settled by the P1/P2 implementations — persistence is always
 on, the budget is a count cap, the snapshot version is derived from the build
 id, and the persisted set is the SDK's `isPersistableQuery` rule (queries,
-success, non-error, not `gcTime: 0`) rather than a hardcoded list. Question 2
+success, non-error, not `gcTime: 0`, and no `meta.persist: false` opt-out)
+rather than a hardcoded list. Question 2
 was settled against the plan's own proposal: there is no age limit at all
 (§5.1), so the question is no longer "how old may a snapshot be" but "what does
 the app show while the refetch that would replace it is failing" (§5.1b).
