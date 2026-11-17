@@ -77,6 +77,18 @@ export type ClientMessage =
     };
 
 /**
+ * What a sync connection was carrying when it closed. Read once, by the
+ * router's close path, so the disconnect record names the space(s) the
+ * dropped socket was serving — a close code alone cannot say which.
+ */
+export interface SyncCloseSnapshot {
+  /** Topic keys (`space:<did>`, `room:<id>`, `mentions:<did>`) subscribed at close. */
+  topics: readonly string[];
+  /** Stream DIDs subscribed at close. */
+  streams: readonly string[];
+}
+
+/**
  * Abstraction over a single WS connection, passed to the SyncHandler.
  * Never touches the raw Bun WebSocket directly.
  */
@@ -87,6 +99,12 @@ export interface SyncSocket {
   onMessage(handler: (msg: ClientMessage) => void): void;
   /** Register handler for when the connection closes. */
   onClose(handler: () => void): void;
+  /**
+   * Register the close-time snapshot of what this connection was carrying.
+   * The router reads it while closing, before the connection's state is torn
+   * down, so the close record can name the space that lost its socket.
+   */
+  onCloseSnapshot(handler: () => SyncCloseSnapshot): void;
   /** Check if connection is still open. */
   readonly isOpen: boolean;
   /** Authenticated DID of the connected user. */

@@ -1,8 +1,9 @@
-import { describe, expect, test, vi } from "bun:test";
+import { afterEach, describe, expect, test, vi } from "bun:test";
 import { type } from "arktype";
 import { XrpcRouter } from "./router.ts";
 import { XrpcError } from "./errors.ts";
-import type { AuthCtx } from "./types.ts";
+import type { AuthCtx, SyncCloseSnapshot } from "./types.ts";
+import { metrics } from "../metrics.ts";
 
 const stubAuth = async (_req: Request): Promise<AuthCtx> => ({
   did: "did:plc:test",
@@ -325,5 +326,107 @@ describe("XrpcRouter error attribution", () => {
     await call(router, "http://x/xrpc/test.stream");
 
     expect(seen).toEqual(["did:plc:test"]);
+  });
+});
+
+// ─── WebSocket close instrumentation ───────────────────────────────────────
+
+/** Value of a single-series line in a Prometheus scrape, or 0 when absent. */
+function seriesValue(scrape: string, series: string): number {
+  const line = scrape
+    .split("\n")
+    .find((l) => l.startsWith(series + " "));
+  return line ? Number(line.slice(series.length + 1)) : 0;
+}
+
+function fakeSocket(
+  closeSnapshot: () => SyncCloseSnapshot | undefined,
+  onClose: () => void,
+  order: string[],
+): Parameters<NonNullable<XrpcRouter["websocket"]["close"]>>[0] {
+  const ws = {
+    data: {
+      nsid: "space.roomy.sync.subscribe",
+      auth: { did: "did:plc:close-test" },
+      abort: new AbortController(),
+      openedAt: Date.now() - 2_000,
+      closeSnapshot: () => {
+        order.push("snapshot");
+        return closeSnapshot();
+      },
+      onClose: () => {
+        order.push("onClose");
+        onClose();
+      },
+    },
+  };
+  return ws as unknown as Parameters<
+    NonNullable<XrpcRouter["websocket"]["close"]>
+  >[0];
+}
+
+describe("sync WebSocket close instrumentation", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("counts the close under its close code and logs what it carried", () => {
+    const router = build(() => {});
+    const order: string[] = [];
+    let closed = false;
+    const snapshot: SyncCloseSnapshot = {
+      topics: ["space:did:web:close-test", "room:01KZ"],
+      streams: ["did:web:close-test"],
+    };
+    const ws = fakeSocket(
+      () => snapshot,
+      () => {
+        closed = true;
+      },
+      order,
+    );
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    const series = 'roomy_sync_disconnects_total{code="4000"}';
+    const before = seriesValue(metrics.render(), series);
+    router.websocket.close?.(ws, 4000, "server restart");
+
+    expect(seriesValue(metrics.render(), series)).toBe(before + 1);
+    // The snapshot is read before onClose drops the connection's state.
+    expect(order).toEqual(["snapshot", "onClose"]);
+    expect(closed).toBe(true);
+    expect(ws.data.abort.signal.aborted).toBe(true);
+
+    const record = JSON.parse(String(infoSpy.mock.calls.at(-1)![0])) as Record<
+      string,
+      unknown
+    >;
+    expect(record["scope"]).toBe("sync");
+    expect(record["msg"]).toBe("socket closed");
+    expect(record["code"]).toBe(4000);
+    expect(record["reason"]).toBe("server restart");
+    expect(record["did"]).toBe("did:plc:close-test");
+    expect(record["nsid"]).toBe("space.roomy.sync.subscribe");
+    expect(record["topics"]).toEqual(snapshot.topics);
+    expect(record["streams"]).toEqual(snapshot.streams);
+    expect(Number(record["durationMs"])).toBeGreaterThanOrEqual(2_000);
+  });
+
+  test("a socket with no snapshot still counts, with empty subscription lists", () => {
+    const router = build(() => {});
+    const ws = fakeSocket(() => undefined, () => {}, []);
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    const series = 'roomy_sync_disconnects_total{code="1006"}';
+    const before = seriesValue(metrics.render(), series);
+    router.websocket.close?.(ws, 1006, "");
+
+    expect(seriesValue(metrics.render(), series)).toBe(before + 1);
+    const record = JSON.parse(String(infoSpy.mock.calls.at(-1)![0])) as Record<
+      string,
+      unknown
+    >;
+    expect(record["topics"]).toEqual([]);
+    expect(record["streams"]).toEqual([]);
   });
 });

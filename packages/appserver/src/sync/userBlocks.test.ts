@@ -79,6 +79,8 @@ class MockSocket {
 
   onClose(): void {}
 
+  onCloseSnapshot(): void {}
+
   receive(msg: ClientMessage): void {
     this.messageHandler?.(msg);
   }

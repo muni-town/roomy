@@ -5,6 +5,7 @@ import type {
   RouteDef,
   ClientMessage,
   SyncSocket,
+  SyncCloseSnapshot,
 } from "./types.ts";
 import type { AuthVerifier } from "./auth.ts";
 import { consumeTicket } from "./auth.ts";
@@ -18,6 +19,19 @@ import {
 } from "./rateLimit.ts";
 import type { QueryCache } from "../cache/queryCache.ts";
 import { log } from "../log.ts";
+import { metrics } from "../metrics.ts";
+
+/**
+ * Sync WebSocket closes, by WebSocket close code. A dropped socket is only
+ * actionable if it is visible: the sync client reconnects silently, so
+ * without this series a socket that dies every few minutes and one that
+ * lives for an hour look identical from `/metrics`.
+ */
+const syncDisconnects = metrics.counter(
+  "roomy_sync_disconnects_total",
+  "Sync WebSocket connections closed, by WebSocket close code.",
+  ["code"],
+);
 
 function validateOrReject(
   schema: import("arktype").Type<any, any>,
@@ -105,10 +119,14 @@ export interface WsData {
   params?: QueryParams;
   auth: AuthCtx;
   abort: AbortController;
+  /** Wall-clock ms the upgrade completed, for the close record's open duration. */
+  openedAt: number;
   /** Callback set by the sync handler via SyncSocket.onMessage(). */
   onMessage?: (msg: ClientMessage) => void;
   /** Callback set by the sync handler via SyncSocket.onClose(). */
   onClose?: () => void;
+  /** Snapshot set by the sync handler via SyncSocket.onCloseSnapshot(). */
+  closeSnapshot?: () => SyncCloseSnapshot;
 }
 
 export class XrpcRouter {
@@ -359,7 +377,7 @@ export class XrpcRouter {
 
           const abort = new AbortController();
           const upgraded = server.upgrade(req, {
-            data: { nsid, params, auth, abort } satisfies WsData,
+            data: { nsid, params, auth, abort, openedAt: Date.now() } satisfies WsData,
           });
           if (!upgraded) {
             return new Response("Expected WebSocket upgrade", { status: 426 });
@@ -383,7 +401,7 @@ export class XrpcRouter {
 
           const abort = new AbortController();
           const upgraded = server.upgrade(req, {
-            data: { nsid, auth, abort } satisfies WsData,
+            data: { nsid, auth, abort, openedAt: Date.now() } satisfies WsData,
           });
           if (!upgraded) {
             return new Response("Expected WebSocket upgrade", { status: 426 });
@@ -464,6 +482,9 @@ export class XrpcRouter {
             onClose: (handler) => {
               ws.data.onClose = handler;
             },
+            onCloseSnapshot: (handler) => {
+              ws.data.closeSnapshot = handler;
+            },
             get isOpen() {
               return ws.readyState === WebSocket.OPEN;
             },
@@ -496,9 +517,23 @@ export class XrpcRouter {
         }
       },
 
-      close: (ws) => {
+      close: (ws, code, reason) => {
+        // Read before onClose: the handler drops the connection's
+        // subscriptions on close, and this record's whole point is to name
+        // the space(s) the socket was carrying when it died.
+        const snapshot = ws.data.closeSnapshot?.();
         ws.data.abort.abort();
         ws.data.onClose?.();
+        syncDisconnects.inc({ code: String(code) });
+        log.info("[sync] socket closed", {
+          nsid: ws.data.nsid ?? null,
+          did: ws.data.auth.did,
+          code,
+          reason,
+          durationMs: Date.now() - ws.data.openedAt,
+          topics: snapshot?.topics ?? [],
+          streams: snapshot?.streams ?? [],
+        });
       },
     };
   }

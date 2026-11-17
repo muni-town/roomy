@@ -639,6 +639,156 @@ describe("LiveRoomyGateway", () => {
 		});
 	});
 
+	// ─── Reconnect recovery record ─────────────────────────────────────────
+
+	describe("reconnect recovery record", () => {
+		let infoSpy: ReturnType<typeof vi.spyOn>;
+		let randomSpy: ReturnType<typeof vi.spyOn>;
+
+		beforeEach(() => {
+			process.env.BRIDGE_RECONNECT_BASE_MS = "1000";
+			process.env.BRIDGE_RECONNECT_MAX_MS = "100000";
+			randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+			infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+			vi.useFakeTimers();
+		});
+
+		afterEach(() => {
+			vi.useRealTimers();
+			vi.restoreAllMocks();
+			delete process.env.BRIDGE_RECONNECT_BASE_MS;
+			delete process.env.BRIDGE_RECONNECT_MAX_MS;
+		});
+
+		/** Every JSON log record emitted so far. */
+		function records(): Record<string, unknown>[] {
+			const out: Record<string, unknown>[] = [];
+			for (const call of infoSpy.mock.calls) {
+				try {
+					out.push(JSON.parse(call[0] as string) as Record<string, unknown>);
+				} catch {
+					// not a structured record
+				}
+			}
+			return out;
+		}
+
+		function recoveryRecords(): Record<string, unknown>[] {
+			return records().filter((r) =>
+				String(r["msg"]).startsWith(`Sync recovery for ${SPACE_DID}`),
+			);
+		}
+
+		/** Drop the socket and let the SDK's reconnect timer open a new one. */
+		async function dropAndReconnect(): Promise<void> {
+			lastSocket!._emitClose(1006);
+			vi.advanceTimersByTime(500);
+			lastSocket!._open();
+			await flush();
+		}
+
+		test("a reconnect records the cursor it resumed from and what the frame recovered", async () => {
+			const callback = vi.fn() as unknown as RoomyEventCallback;
+			await subscribeAndConnect(SPACE_DID, callback);
+
+			// Deliver idx 0 so the persisted cursor is a real resume point.
+			await emitStreamEvents(
+				SPACE_DID,
+				[{ idx: 0, user: "did:web:test-user", event: makeEvent() }],
+				0,
+			);
+			expect(repo.getSpaceCursor(SPACE_DID)).toBe(0);
+
+			await dropAndReconnect();
+
+			// The server replays everything published during the outage.
+			await emitStreamEvents(
+				SPACE_DID,
+				[
+					{ idx: 1, user: "did:web:test-user", event: makeEvent() },
+					{ idx: 2, user: "did:web:test-user", event: makeEvent() },
+				],
+				2,
+			);
+
+			const reconnected = records().find((r) =>
+				String(r["msg"]).startsWith(`Sync reconnected for ${SPACE_DID}`),
+			);
+			expect(reconnected).toMatchObject({ spaceDid: SPACE_DID, cursor: 0 });
+			expect(typeof reconnected!["reconnectLagMs"]).toBe("number");
+			expect(typeof reconnected!["previousSocketMs"]).toBe("number");
+
+			const recovery = recoveryRecords();
+			expect(recovery.length).toBe(1);
+			expect(recovery[0]).toMatchObject({
+				spaceDid: SPACE_DID,
+				cursor: 0,
+				outcome: "gap-replayed",
+				recoveredEvents: 2,
+				skippedEvents: 0,
+				firstIdx: 1,
+				lastIdx: 2,
+				hasMore: false,
+			});
+			expect(typeof recovery[0]!["reconnectLagMs"]).toBe("number");
+			// The replay is persisted like any other batch.
+			expect(repo.getSpaceCursor(SPACE_DID)).toBe(2);
+		});
+
+		test("events the stream no longer holds are counted as a permanent hole", async () => {
+			const callback = vi.fn() as unknown as RoomyEventCallback;
+			await subscribeAndConnect(SPACE_DID, callback);
+			await emitStreamEvents(
+				SPACE_DID,
+				[{ idx: 0, user: "did:web:test-user", event: makeEvent() }],
+				0,
+			);
+
+			await dropAndReconnect();
+
+			// The first event after the resume is idx 4: 1..3 are gone.
+			await emitStreamEvents(
+				SPACE_DID,
+				[{ idx: 4, user: "did:web:test-user", event: makeEvent() }],
+				4,
+			);
+
+			expect(recoveryRecords()[0]).toMatchObject({
+				cursor: 0,
+				outcome: "hole",
+				recoveredEvents: 1,
+				skippedEvents: 3,
+				firstIdx: 4,
+				lastIdx: 4,
+			});
+
+			// Later frames belong to the recovered connection, not a recovery.
+			await emitStreamEvents(
+				SPACE_DID,
+				[{ idx: 5, user: "did:web:test-user", event: makeEvent() }],
+				5,
+			);
+			expect(recoveryRecords().length).toBe(1);
+		});
+
+		test("the first connect is not recorded as a reconnect or a recovery", async () => {
+			const callback = vi.fn() as unknown as RoomyEventCallback;
+			await subscribeAndConnect(SPACE_DID, callback);
+			await emitStreamEvents(
+				SPACE_DID,
+				[{ idx: 0, user: "did:web:test-user", event: makeEvent() }],
+				0,
+			);
+
+			expect(
+				records().some((r) =>
+					String(r["msg"]).startsWith(`Sync reconnected for ${SPACE_DID}`),
+				),
+			).toBe(false);
+			expect(recoveryRecords()).toEqual([]);
+		});
+	});
+
 	describe("shared reconnect circuit breaker", () => {
 		let infoSpy: ReturnType<typeof vi.spyOn>;
 		let randomSpy: ReturnType<typeof vi.spyOn>;

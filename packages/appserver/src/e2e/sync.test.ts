@@ -122,3 +122,58 @@ describe("WebSocket sync subscription", () => {
     { timeout: 30000 },
   );
 });
+
+describe("sync socket disconnect instrumentation", () => {
+  /** The value of one Prometheus series line in a /metrics scrape, or 0. */
+  function seriesValue(scrape: string, series: string): number {
+    const line = scrape.split("\n").find((l) => l.startsWith(series + " "));
+    return line ? Number(line.slice(series.length + 1)) : 0;
+  }
+
+  test(
+    "a closed socket counts under its close code and names the topics it carried",
+    async () => {
+      const ctx = await setupSyncSpace();
+      const before = await (await ctx.anonFetch(`${ctx.baseUrl}/metrics`)).text();
+      const series = 'roomy_sync_disconnects_total{code="1000"}';
+      const countBefore = seriesValue(before, series);
+
+      const ticketRes = await ctx.authedFetch(USER)(
+        `${ctx.baseUrl}/xrpc/space.roomy.auth.getConnectionTicket`,
+        { method: "POST", body: "{}" },
+      );
+      const { ticket } = await ticketRes.json();
+      const ws = new WebSocket(
+        `ws://localhost:${ctx.handle.port}/xrpc/space.roomy.sync.subscribe?ticket=${ticket}`,
+      );
+      await new Promise<void>((resolve, reject) => {
+        ws.onopen = () => resolve();
+        ws.onerror = () => reject(new Error("WebSocket connection failed"));
+        setTimeout(() => reject(new Error("Timeout waiting for WS open")), 5000);
+      });
+
+      // Subscribe to this connection's own mentions topic: it is registered
+      // synchronously (no access check), so the close record has a topic to
+      // name no matter how fast the socket is torn down.
+      ws.send(JSON.stringify({ type: "sub", topic: "mentions", id: USER }));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const closed = new Promise<void>((resolve) => {
+        ws.onclose = () => resolve();
+      });
+      ws.close();
+      await closed;
+
+      // The server's close handler runs after the client's close resolves;
+      // poll the scrape rather than assuming the ordering.
+      let after = "";
+      for (let i = 0; i < 50; i++) {
+        after = await (await ctx.anonFetch(`${ctx.baseUrl}/metrics`)).text();
+        if (seriesValue(after, series) > countBefore) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      expect(seriesValue(after, series)).toBeGreaterThan(countBefore);
+    },
+    { timeout: 30000 },
+  );
+});

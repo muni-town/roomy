@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { ClientMessage, Frame, SyncSocket } from "../xrpc/types.ts";
+import type {
+  ClientMessage,
+  Frame,
+  SyncCloseSnapshot,
+  SyncSocket,
+} from "../xrpc/types.ts";
 import type {
   InvalidationEvent,
   InvalidationRouter,
@@ -18,6 +23,7 @@ class MockSocket {
   readonly sentFrames: Frame[] = [];
   private messageHandler?: (msg: ClientMessage) => void;
   private closeHandler?: () => void;
+  private closeSnapshotHandler?: () => SyncCloseSnapshot;
   private _isOpen = true;
 
   constructor(did: string) {
@@ -38,6 +44,15 @@ class MockSocket {
 
   onClose(handler: () => void): void {
     this.closeHandler = handler;
+  }
+
+  onCloseSnapshot(handler: () => SyncCloseSnapshot): void {
+    this.closeSnapshotHandler = handler;
+  }
+
+  /** What the router's close path would read for this socket. */
+  closeSnapshot(): SyncCloseSnapshot | undefined {
+    return this.closeSnapshotHandler?.();
   }
 
   /** Simulate a client message. */

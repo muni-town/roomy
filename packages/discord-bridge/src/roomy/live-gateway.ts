@@ -39,6 +39,36 @@ interface StreamEventsBody {
 	events: StreamEventEntry[];
 }
 
+/**
+ * What the gateway knows about a space's socket between (re)connects. A
+ * dropped sync socket reconnects silently: without this, the only evidence
+ * of an outage is the close warn line, and nothing says how much of the
+ * stream the reconnect recovered.
+ */
+interface SyncTrace {
+	/** Wall-clock ms the current socket opened. */
+	openedAt: number;
+	/** Wall-clock ms the current outage began; absent while the socket is up. */
+	closedAt?: number;
+	/** Last-delivered event idx at the moment the socket dropped (exclusive). */
+	cursor: number;
+	/** How long the socket was down before this open; set on a reconnect. */
+	reconnectLagMs?: number;
+	/** How long the dropped socket had been open; set on a reconnect. */
+	previousSocketMs?: number;
+	/** True from a drop until the first frame of the recovery is recorded. */
+	recovering: boolean;
+}
+
+/** How the first frame after a reconnect relates to the cursor it resumed from. */
+type RecoveryOutcome =
+	/** The frame carried events continuing straight on from the cursor. */
+	| "gap-replayed"
+	/** Events between the cursor and the first recovered event are gone for good. */
+	| "hole"
+	/** The frame carried no events; nothing was left to replay. */
+	| "clean";
+
 export class LiveRoomyGateway implements RoomyGateway {
 	#spaceManager: SpaceManager;
 	#repo: BridgeRepository;
@@ -50,6 +80,8 @@ export class LiveRoomyGateway implements RoomyGateway {
 	#connections = new Map<string, sync.SyncConnection>();
 	/** Per-space processing chain — ensures frames are processed sequentially. */
 	#processing = new Map<string, Promise<void>>();
+	/** Per-space socket lifecycle, read when a reconnect recovers events. */
+	#traces = new Map<string, SyncTrace>();
 	/**
 	 * Shared reconnect circuit breaker. When the appserver is failing, every
 	 * space connection drops and the SDK schedules a reconnect. If each used
@@ -195,6 +227,33 @@ export class LiveRoomyGateway implements RoomyGateway {
 			// frames (hasMore=true) would be mislabeled isBackfill=false.
 			backfillState.value = true;
 			const freshCursor = this.#repo.getSpaceCursor(spaceDid) ?? -1;
+			// Record the reconnect itself: this fires on every socket that
+			// opens after a drop, and it is the only place the outage's
+			// duration and the cursor the resume started from are both known.
+			const previous = this.#traces.get(spaceDid);
+			const now = Date.now();
+			const reconnectLagMs =
+				previous?.closedAt !== undefined ? now - previous.closedAt : undefined;
+			const previousSocketMs =
+				previous?.closedAt !== undefined
+					? previous.closedAt - previous.openedAt
+					: undefined;
+			this.#traces.set(spaceDid, {
+				openedAt: now,
+				cursor: freshCursor,
+				recovering: reconnectLagMs !== undefined,
+				...(reconnectLagMs !== undefined
+					? { reconnectLagMs, previousSocketMs }
+					: {}),
+			});
+			if (reconnectLagMs !== undefined) {
+				log.info(`Sync reconnected for ${spaceDid}`, {
+					spaceDid,
+					cursor: freshCursor,
+					reconnectLagMs,
+					previousSocketMs,
+				});
+			}
 			// Drop any in-flight processing chain from the previous socket.
 			// Frames on that connection may still be working through
 			// callbacks (e.g. a slow profile fetch). A rejected leftover would
@@ -234,6 +293,13 @@ export class LiveRoomyGateway implements RoomyGateway {
 			log.error(`Connection error for ${spaceDid}`, err);
 		});
 		connection.onClose((info: sync.CloseEventInfo) => {
+			const trace = this.#traces.get(spaceDid);
+			if (trace && trace.closedAt === undefined) {
+				// First close of this outage: later reconnect attempts must
+				// not restart the lag clock, or a long outage reads as short.
+				trace.closedAt = Date.now();
+				trace.cursor = this.#repo.getSpaceCursor(spaceDid) ?? -1;
+			}
 			log.warn(
 				`Connection closed for ${spaceDid}: code=${info.code} reason=${info.reason}` +
 					(info.intentional ? " (intentional)" : ""),
@@ -284,6 +350,8 @@ export class LiveRoomyGateway implements RoomyGateway {
 		const data = body as unknown as StreamEventsBody;
 		if (!data || !Array.isArray(data.events)) return;
 
+		this.#recordRecovery(spaceDid, data);
+
 		// `isBackfill` describes the state at the *start* of this frame,
 		// not the server's signal for the *next* frame. The final backfill
 		// batch still carries historical events, so it should be flagged as
@@ -333,6 +401,48 @@ export class LiveRoomyGateway implements RoomyGateway {
 		if (wasBackfill && !data.hasMore) backfillState.value = false;
 	}
 
+	/**
+	 * Record what the first frame after a reconnect recovered, once per
+	 * reconnect. This is the answer to "what did the drop cost us": the
+	 * cursor the resume started from, how many events the frame carried, and
+	 * whether they continue straight on from that cursor (replayed) or skip
+	 * events the stream no longer holds (a permanent hole).
+	 */
+	#recordRecovery(spaceDid: string, data: StreamEventsBody): void {
+		const trace = this.#traces.get(spaceDid);
+		if (trace?.recovering !== true) return;
+		trace.recovering = false;
+
+		const cursor = trace.cursor;
+		const first = data.events[0];
+		const last = data.events[data.events.length - 1];
+		// Events between the resume cursor and the first event delivered are
+		// absent from this frame, so the stream cannot produce them: that
+		// count is the gap the reconnect did NOT recover.
+		const skippedEvents = first ? Math.max(0, first.idx - cursor - 1) : 0;
+		const outcome: RecoveryOutcome =
+			data.events.length === 0
+				? "clean"
+				: skippedEvents > 0
+					? "hole"
+					: "gap-replayed";
+		log.info(`Sync recovery for ${spaceDid}`, {
+			spaceDid,
+			cursor,
+			outcome,
+			recoveredEvents: data.events.length,
+			skippedEvents,
+			firstIdx: first?.idx ?? null,
+			lastIdx: last?.idx ?? null,
+			hasMore: data.hasMore,
+			// `reconnectLagMs` is the outage (close → open); `firstFrameMs` is
+			// how long after the open the recovery frame took to arrive.
+			reconnectLagMs: trace.reconnectLagMs ?? null,
+			previousSocketMs: trace.previousSocketMs ?? null,
+			firstFrameMs: Date.now() - trace.openedAt,
+		});
+	}
+
 	async unsubscribe(spaceDid: string): Promise<void> {
 		if (!this.#subscriptions.has(spaceDid)) return;
 
@@ -343,6 +453,7 @@ export class LiveRoomyGateway implements RoomyGateway {
 		this.#connections.delete(spaceDid);
 		this.#subscriptions.delete(spaceDid);
 		this.#processing.delete(spaceDid);
+		this.#traces.delete(spaceDid);
 		log.info(`Unsubscribed from ${spaceDid}`);
 	}
 
@@ -353,6 +464,7 @@ export class LiveRoomyGateway implements RoomyGateway {
 		this.#connections.clear();
 		this.#subscriptions.clear();
 		this.#processing.clear();
+		this.#traces.clear();
 		await this.#spaceManager.disconnectAll();
 	}
 

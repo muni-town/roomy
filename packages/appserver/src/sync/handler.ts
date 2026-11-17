@@ -332,6 +332,13 @@ export class SyncManager {
       }
     });
 
+    // What this socket was carrying, read by the router's close path while
+    // the subscription sets are still intact (onClose clears them below).
+    socket.onCloseSnapshot(() => ({
+      topics: [...state.topics],
+      streams: [...state.streams.keys()],
+    }));
+
     socket.onClose(() => {
       state.isOpen = false;
       this.#connections.delete(connId);
