@@ -1,0 +1,87 @@
+# ── Rust appserver Dockerfile ────────────────────────────────────────────
+# The Rust core (crates/roomy-appserver) as its own image: one static binary,
+# no Bun, no node_modules, no Litestream.
+#
+# The build stage is the same one Dockerfile.appserver carries, because the
+# binary is the same binary: it is built there for the shadow follower and here
+# for a service of its own. Keeping the two stages identical is what keeps one
+# image from falling behind the other.
+#
+# rusqlite is `bundled`, and the two schema files and the exclusion manifest are
+# `include_str!` in the crates, so the binary has no inputs the runtime stage
+# must carry. Dropping any of the three from the build context fails the
+# compile, not the boot.
+
+# ── Stage 1: The Rust appserver binary ───────────────────────────────────
+# The dependency graph is the slow part, so it is built in its own layer from
+# the manifests and a stub source tree; editing a `.rs` file then recompiles
+# only this workspace's crates.
+FROM rust:1.99-bookworm AS rust-build
+
+WORKDIR /src
+
+COPY rust-toolchain.toml Cargo.toml Cargo.lock ./
+COPY crates ./crates
+COPY packages/appserver/src/db/schema-space.sql packages/appserver/src/db/schema-space.sql
+COPY packages/appserver/src/db/schema-global.sql packages/appserver/src/db/schema-global.sql
+COPY packages/appserver/src/db/oracle-exclusions.json packages/appserver/src/db/oracle-exclusions.json
+RUN find crates -name '*.rs' -delete \
+    && for crate in crates/*/; do \
+         mkdir -p "$crate/src" && touch "$crate/src/lib.rs"; \
+       done \
+    && printf 'fn main() {}\n' > crates/roomy-appserver/src/main.rs \
+    && cargo build --release -p roomy-appserver
+
+# The real sources, then the same build with the dependency layer already warm.
+COPY crates /tmp/sources
+RUN rm -rf crates \
+    && mv /tmp/sources crates \
+    && find crates -name '*.rs' -exec touch {} + \
+    && cargo build --release -p roomy-appserver
+
+# ── Stage 2: Runtime ─────────────────────────────────────────────────────
+FROM debian:bookworm-slim
+
+# Build identity for the `build_id` field on every log line. Docker does NOT
+# propagate ARG across stages, so the pair has to be declared here as well as in
+# the build stage above; ARG is scoped per-stage for exactly this reason.
+ARG RAILWAY_GIT_COMMIT_SHA
+ENV BUILD_ID=${RAILWAY_GIT_COMMIT_SHA%"${RAILWAY_GIT_COMMIT_SHA#??*??????}"}
+
+# ca-certificates: the binary does TLS to plc.directory, the Bluesky appview,
+# HappyView, the targets it unfurls links against and the issuer DID documents
+# its session verifier resolves. sqlite3: the entrypoint reads the event log's
+# space list at boot, and an operator needs a query tool inside the container.
+# Nothing else belongs in here.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates sqlite3 \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY --from=rust-build /src/target/release/roomy-appserver /usr/local/bin/roomy-appserver
+
+COPY crates/roomy-appserver/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Data lives on the platform's mounted volume: the per-space databases and the
+# event log under it are what survives a deploy.
+ENV ROOMY_DATA_DIR=/data
+RUN mkdir -p /data/spaces \
+ && groupadd --system roomy \
+ && useradd --system --no-create-home --shell /usr/sbin/nologin \
+        --gid roomy roomy \
+ && chown -R roomy:roomy /data
+
+# The entrypoint starts as root and gives the data directory to `roomy` before
+# it drops to that user (see the entrypoint's data-directory block). A volume
+# mounted at /data arrives owned by root and covers this stage's /data, so the
+# process cannot create /data/spaces inside it without that repair; the process
+# itself is unprivileged either way.
+WORKDIR /data
+
+EXPOSE 8080
+
+# The entrypoint binds the platform's port and derives the owner's space list
+# from the log; `--role all` is the default role and is stated so a service that
+# overrides the start command has something to diverge from.
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["--role", "all"]

@@ -38,10 +38,13 @@ use tracing::{Event, Metadata, Subscriber};
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::Layer;
 
-/// The Loki `service_name` for this process. The TypeScript appserver writes
-/// `appserver`; a stream that mixed the two would attribute the shadow's
-/// numbers to the service it shadows.
-const SERVICE_NAME: &str = "space-worker";
+/// The Loki `service_name` this process writes when `ROOMY_SERVICE_NAME` names
+/// no other. The TypeScript appserver writes `appserver`; a stream that mixed
+/// the two would attribute one service's numbers to the other. A second
+/// deployment of this binary writing the same label set would merge into one
+/// stream for the same reason, which is what the override is for: each
+/// deployment names itself.
+const DEFAULT_SERVICE_NAME: &str = "space-worker";
 
 const DEFAULT_MAX_QUEUE: usize = 10_000;
 const DEFAULT_BATCH_SIZE: usize = 500;
@@ -162,6 +165,12 @@ fn resolve_env(app_env: Option<&str>, railway: Option<&str>) -> String {
 
 fn resolve_build_id(value: Option<&str>) -> String {
     clean(value).unwrap_or("unknown").to_string()
+}
+
+/// The `service_name` label: `ROOMY_SERVICE_NAME`, then the default. A blank
+/// value is absent by the same rule every other variable follows.
+fn resolve_service_name(value: Option<&str>) -> String {
+    clean(value).unwrap_or(DEFAULT_SERVICE_NAME).to_string()
 }
 
 /// `1970-01-01T00:00:00.000Z`-shaped, in UTC, with no dependency for it: the
@@ -442,6 +451,9 @@ pub struct LokiSink {
     /// The push URL's host, for the self-report line: the full URL may carry
     /// credentials and never reaches a log.
     target: String,
+    /// The `service_name` label, resolved once at startup: a second deployment
+    /// of this binary must not merge into the first one's stream.
+    service_name: String,
     env: String,
     build_id: String,
     limits: Limits,
@@ -485,16 +497,18 @@ impl LokiSink {
                 std::env::var("RAILWAY_ENVIRONMENT_NAME").ok().as_deref(),
             ),
             resolve_build_id(std::env::var("BUILD_ID").ok().as_deref()),
+            resolve_service_name(std::env::var("ROOMY_SERVICE_NAME").ok().as_deref()),
             Limits::default(),
         );
         (Some(Arc::new(sink)), None)
     }
 
-    fn new(url: Url, env: String, build_id: String, limits: Limits) -> Self {
+    fn new(url: Url, env: String, build_id: String, service_name: String, limits: Limits) -> Self {
         let (requests, requests_rx) = mpsc::unbounded_channel();
         Self {
             target: host_of(&url),
             push_url: url.to_string(),
+            service_name,
             env,
             build_id,
             limits,
@@ -685,7 +699,7 @@ impl LokiSink {
                 return;
             }
             let count = batch.len() as u64;
-            let body = push_body(&self.env, &batch);
+            let body = push_body(&self.service_name, &self.env, &batch);
             let outcome = self.send(client, body).await;
             self.report(&outcome);
             if matches!(outcome, Outcome::Sent) {
@@ -749,7 +763,7 @@ impl LokiSink {
 /// The Loki push body: one stream per distinct label set, each carrying its
 /// records in order. Built by hand so a record's line is not copied again into
 /// a `serde_json::Value` tree.
-fn push_body(env: &str, batch: &[Record]) -> String {
+fn push_body(service_name: &str, env: &str, batch: &[Record]) -> String {
     use std::fmt::Write;
 
     let mut streams: BTreeMap<Labels, Vec<&Record>> = BTreeMap::new();
@@ -757,7 +771,8 @@ fn push_body(env: &str, batch: &[Record]) -> String {
         streams.entry(record.labels).or_default().push(record);
     }
     let quoted_env = serde_json::to_string(env).unwrap_or_else(|_| "\"unknown\"".into());
-    let service = serde_json::to_string(SERVICE_NAME).unwrap_or_else(|_| "\"space-worker\"".into());
+    let service = serde_json::to_string(service_name)
+        .unwrap_or_else(|_| format!("\"{DEFAULT_SERVICE_NAME}\""));
 
     let mut body = String::from("{\"streams\":[");
     for (index, (labels, records)) in streams.into_iter().enumerate() {
@@ -914,11 +929,18 @@ mod tests {
     }
 
     fn sink_for(url: &str, limits: Limits) -> Arc<LokiSink> {
+        sink_named(url, DEFAULT_SERVICE_NAME, limits)
+    }
+
+    /// The same sink with the `service_name` label spelled out, for the
+    /// deployment that names itself.
+    fn sink_named(url: &str, service_name: &str, limits: Limits) -> Arc<LokiSink> {
         let url = Url::parse(url).expect("test push URL");
         Arc::new(LokiSink::new(
             url,
             "staging".to_string(),
             "abc1234".to_string(),
+            service_name.to_string(),
             limits,
         ))
     }
@@ -1008,6 +1030,27 @@ mod tests {
             values[0].0.parse::<u128>().expect("nanoseconds") > 1_600_000_000_000_000_000,
             "the Loki value timestamp is nanoseconds since the epoch"
         );
+    }
+
+    /// A second deployment of this binary must not write the first one's
+    /// stream: the label is what separates them in Grafana, so it follows
+    /// `ROOMY_SERVICE_NAME` rather than the binary's default.
+    #[tokio::test]
+    async fn a_named_sink_writes_its_own_service_name_label() {
+        let alloy = Alloy::new(200).await;
+        let sink = sink_named(&alloy.url, "rust-appserver", fast_limits());
+        let _flusher = sink.spawn().expect("flusher");
+
+        emit(&sink, || {
+            tracing::info!(target: "roomy_gateway::traffic", "served a read");
+        });
+        sink.flush(Duration::from_secs(2)).await;
+
+        let bodies = alloy.bodies();
+        assert_eq!(bodies.len(), 1, "one push per flush");
+        let streams = streams(&bodies[0]);
+        assert_eq!(streams.len(), 1, "one stream per label set");
+        assert_eq!(streams[0]["stream"]["service_name"], "rust-appserver");
     }
 
     #[test]
@@ -1234,6 +1277,12 @@ mod tests {
         assert_eq!(resolve_build_id(None), "unknown");
         assert_eq!(resolve_build_id(Some(" ")), "unknown");
         assert_eq!(resolve_build_id(Some("abc1234")), "abc1234");
+        assert_eq!(resolve_service_name(None), "space-worker");
+        assert_eq!(resolve_service_name(Some("  ")), "space-worker");
+        assert_eq!(
+            resolve_service_name(Some(" rust-appserver ")),
+            "rust-appserver"
+        );
     }
 
     #[test]

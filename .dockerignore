@@ -4,7 +4,9 @@
 *.md
 .git
 data/
+target/
 packages/appserver-testing
 Dockerfile
 Dockerfile.appserver
 Dockerfile.docs
+Dockerfile.rust-appserver

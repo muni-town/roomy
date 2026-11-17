@@ -55,6 +55,8 @@
 //!                                     stdout only
 //! APP_ENV              —               the `env` log label; falls back to
 //!                                     RAILWAY_ENVIRONMENT_NAME, then `unknown`
+//! ROOMY_SERVICE_NAME   space-worker    the Loki `service_name` label, so a second
+//!                                     deployment writes its own stream
 //! BUILD_ID             —               the `build_id` log field; `unknown` when
 //!                                     unset (the image bakes it from the commit)
 //! ```

@@ -50,6 +50,7 @@ directory.
 | `ROOMY_TS_ORIGIN` | — | The TypeScript appserver. Set, and spaces not cut over are proxied to it |
 | `ROOMY_SHADOW_PERCENT` | `0` | How many eligible reads are mirrored to it for comparison |
 | `ALLOY_URL` | — | The Alloy Loki push URL (`http://<alloy>:3100/loki/api/v1/push`). Unset: stdout only; not an absolute http(s) URL: no sink, and one line saying so |
+| `ROOMY_SERVICE_NAME` | `space-worker` | The Loki `service_name` label. A second deployment of this binary sets it, or its lines merge into the first one's stream |
 | `APP_ENV` | — | The `env` log label; falls back to `RAILWAY_ENVIRONMENT_NAME`, then `unknown` |
 | `BUILD_ID` | `unknown` | The `build_id` field of every log line (the image bakes the commit into it) |
 | `RUST_LOG` | `info` | Which events exist at all: the filter both log destinations share |
@@ -100,6 +101,69 @@ deployment that wants a bounded replay uses.
 A path variable that is set but blank counts as unset, so a template that renders
 an empty value falls through to the default.
 
+## Deploying on Railway
+
+The image is `Dockerfile.rust-appserver`: a two-stage build whose runtime is
+`debian:bookworm-slim` with `ca-certificates` and `sqlite3`, a release binary at
+`/usr/local/bin/roomy-appserver`, and an unprivileged user that owns `/data`.
+`crates/roomy-appserver/docker-entrypoint.sh` runs as the entrypoint; the default
+command is `--role all`. The entrypoint starts as root only to give the data
+directory to that user — a volume mounted at `/data` arrives owned by root and
+would otherwise leave the process unable to create `/data/spaces` — and the
+binary itself runs as `roomy`, never as root.
+
+| Variable | Set it to | Why |
+| --- | --- | --- |
+| `ROOMY_DATA_DIR` | `/data` | Where the per-space databases, `global.sqlite` and the event log live. Mount the volume here, or every deploy starts from nothing |
+| `PORT` | the platform's port | Railway routes the service's public address to it. The entrypoint turns it into `ROOMY_HTTP_ADDR=0.0.0.0:$PORT`; set `ROOMY_HTTP_ADDR` itself to override |
+| `ROOMY_TICKET_SECRET` | a long random string | Signs connection tickets. The gateway role exits 2 without it |
+| `ROOMY_SERVER_DID` | the DID clients address this service by | The audience a session token must name. Required, and the process exits without it, unless `ROOMY_TEST_MODE=true` or the split deployment's three variables are set |
+| `ROOMY_TEST_MODE` | `true` | Accepts `X-Test-Did` and no other credential, which is the alternative to `ROOMY_SERVER_DID`. See the paragraph on authentication below |
+| `ROOMY_SPACES` | comma-separated space DIDs | An owner materialises these and no others |
+| `ROOMY_OWNERSHIP` | `owner` (default) or `follower` | `owner` takes leases and writes; `follower` replays beside an owner without taking one |
+| `ROOMY_SERVICE_NAME` | `rust-appserver` | The Loki `service_name`. Without it this service writes into the space worker's stream and the two cannot be told apart |
+| `APP_ENV` | `staging` | The `env` log label, and the Grafana variable that selects these lines |
+| `ALLOY_URL` | the staging Alloy push URL | Unset, the process logs to stdout only, which is not collected into Grafana |
+
+**The owner and the space list.** A Railway service runs `--role all`, so it is a
+gateway and its own workers, and its ownership is `owner` unless told otherwise. An
+owner materialises the spaces it is given: it never discovers a space the log holds,
+because discovery belongs to a follower. On a restored log — or one written by
+another process and mounted into this service — an owner with no `ROOMY_SPACES` opens
+nothing, so a read for any of those spaces has no projection to answer from while
+`/health` still answers 200. The entrypoint closes that gap: when `ROOMY_SPACES` is
+unset and the event log exists, it reads `select did from dids` from it, joins the
+rows with commas and prints the count. A log that is absent, has no `dids` table, or
+holds no rows leaves the variable unset and says so — the container starts either way.
+
+`ROOMY_OWNERSHIP=follower` inverts the rule: the process reads its set from the log
+and starts an actor for each stream it finds, so it needs no space list and picks up
+spaces added while it runs. That is the shape to use when this service is meant to
+replay beside a live owner rather than be one.
+
+**Authentication.** Three verifiers, chosen in this order. `ROOMY_TEST_MODE=true` is
+the harness path: the only credential understood is `X-Test-Did`, so anything that
+can set that header can drive the process and nothing else can. Otherwise a
+deployment that sets all of `ROOMY_GATEWAY_DID`, `ROOMY_WORKER_DID` and
+`ROOMY_GATEWAY_JWK` verifies the service tokens its own gateway mints. Otherwise the
+process verifies ATProto session tokens as a real client sends them — a bearer token
+from `com.atproto.server.getServiceAuth`, checked against the issuer's DID document,
+`aud`, `exp` and `lxm` — and **refuses to start without `ROOMY_SERVER_DID`**, the DID
+that token's audience must name. A Railway service therefore runs either with
+`ROOMY_TEST_MODE=true`, or with `ROOMY_SERVER_DID` set to the DID clients address it
+by. A request that fails verification is treated as anonymous rather than rejected:
+the handlers make the access decision.
+
+**Health and metrics.** The gateway serves `GET /health` on `ROOMY_HTTP_ADDR`, which
+is the path the platform's healthcheck polls; it reports the sessions held and the
+signal subscribers. `GET /metrics` is the Prometheus text the staging Alloy scrapes:
+point the scrape target at `http://<service>:<port>/metrics` alongside the
+TypeScript appserver's, so the two are separable in Grafana by `service`.
+
+`ROOMY_EVENTS_DB` is worth setting when the log lives anywhere other than
+`$ROOMY_DATA_DIR/roomy-events.sqlite`; the entrypoint reads the same path it passes
+to the binary.
+
 ## Logs
 
 Two destinations, one set of events. The `fmt` layer writes a line to stdout, which
@@ -107,8 +171,9 @@ is what `docker logs` shows; when `ALLOY_URL` is set the Loki layer pushes the s
 events to Alloy in process — the container's stdout is not collected into Grafana, so
 without the second destination a deployed process is invisible there.
 
-The Loki stream carries `service_name` (`space-worker`), `env`, `level` and `scope`,
-and the line is one JSON object:
+The Loki stream carries `service_name` (`space-worker`, or whatever
+`ROOMY_SERVICE_NAME` names), `env`, `level` and `scope`, and the line is one JSON
+object:
 
 ```json
 {"ts":"2026-10-27T12:00:00.000Z","level":"info","scope":"materialise","msg":"applied","idx":42,"build_id":"abc1234"}
@@ -118,6 +183,11 @@ and the line is one JSON object:
 `gateway`, `other` — folded from the event's target, so it is a label value and not a
 module path. `build_id` is in the line and not in the labels: a label that changes on
 every deploy splits the stream once per release.
+
+`service_name` is the one label that separates two deployments of this binary in
+Grafana, and it is read once at startup: two processes sharing it — a follower and
+a service of its own, say — write one stream, and neither can be selected without
+the other.
 
 `ALLOY_URL` is checked once at startup. Unset (or blank) is no sink at all; set but
 not an absolute http(s) URL is no sink either, and one line says why — a sink that
