@@ -44,4 +44,41 @@ describe("metrics registry", () => {
     const m = new Metrics();
     expect(m.render()).toBe("");
   });
+
+  test("histogramSeries interpolates p50 and p90 within their buckets", () => {
+    const m = new Metrics();
+    const h = m.histogram("roomy_test_seconds", "test hist", ["db"], [0.1, 0.5, 1]);
+    // Two observations in the 0.5 bucket and two in the 1s bucket, so both
+    // quantiles fall inside a bucket whose neighbours are non-empty.
+    for (const v of [0.2, 0.2, 0.6, 0.6]) h.observe({ db: "global" }, v);
+
+    const [series] = m.histogramSeries("roomy_test_seconds");
+    expect(series?.labels).toEqual({ db: "global" });
+    expect(series?.count).toBe(4);
+    // p50 = rank 2, at the top of the 0.1–0.5 bucket; p90 = rank 3.6, 80% of
+    // the way through the 0.5–1 bucket.
+    expect(series?.p50).toBe(0.5);
+    expect(series?.p90).toBe(0.9);
+  });
+
+  test("histogramSeries reports null above the top finite bucket", () => {
+    const m = new Metrics();
+    const h = m.histogram("roomy_test_seconds", "test hist", ["db"], [0.1, 0.5, 1]);
+    h.observe({ db: "global" }, 0.05);
+    h.observe({ db: "global" }, 0.2);
+    h.observe({ db: "global" }, 2);
+
+    const [series] = m.histogramSeries("roomy_test_seconds");
+    expect(series?.count).toBe(3);
+    expect(series?.p50).toBe(0.3);
+    // Rank 2.7 is past every finite bucket: unreportable, not "1 second".
+    expect(series?.p90).toBeNull();
+  });
+
+  test("histogramSeries yields nothing for an unknown or non-histogram family", () => {
+    const m = new Metrics();
+    m.counter("roomy_test_total", "test counter");
+    expect(m.histogramSeries("roomy_test_total")).toEqual([]);
+    expect(m.histogramSeries("roomy_absent_seconds")).toEqual([]);
+  });
 });

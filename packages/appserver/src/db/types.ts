@@ -232,6 +232,13 @@ export interface WorkerResponse {
    * carries the line. Absent on healthy requests.
    */
   slowMs?: number;
+  /**
+   * Milliseconds the worker spent inside its handler: execution only, with
+   * none of the time the request waited in the worker's message queue. Set on
+   * every reply so the main thread can bin the full statement distribution —
+   * a histogram needs every sample, not just the ones over a threshold.
+   */
+  selfMs?: number;
 }
 
 /** A worker's open-handle and prepared-statement counts, for `/health/pool`. */

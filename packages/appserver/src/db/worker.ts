@@ -878,6 +878,11 @@ self.onmessage = (event: MessageEvent) => {
     }
   }
   const selfMs = performance.now() - start;
+  // Carried on every reply: the main thread bins it into
+  // `roomy_db_statement_seconds`, which is what turns execution time into a
+  // distribution. A threshold-crossing count alone cannot tell one slow
+  // statement from every statement getting slower.
+  response.selfMs = selfMs;
   // Carried on the response rather than logged here: only the main thread's
   // sink reaches Loki (see SLOW_REQUEST_MS). Rounded to keep the message
   // small; the threshold sits far above a healthy sub-millisecond

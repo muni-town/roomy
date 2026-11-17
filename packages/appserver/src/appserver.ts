@@ -22,6 +22,7 @@ import { Router as InvalidationRouter } from "./invalidation/index.ts";
 import { startEmbedSweeper, stopEmbedSweeper, embedSweeperStats } from "./embed/sweeper.ts";
 import { countPendingLinks } from "./embed/enricher.ts";
 import { openDb, openGlobalDb, openReadStateDb, openSpaceDb, openSpaceDbForEntity, closeDb, poolStats } from "./db/db.ts";
+import { DB_STATEMENT_METRIC, DB_WAIT_METRIC } from "./db/asyncDatabase.ts";
 import { StreamManager, setStreamManager, _resetStreamManager } from "./streams/StreamManager.ts";
 import { ACTIVE_WINDOW_MS, purgeStaleThreadActivity, purgeStaleThreadBackfill } from "./queries/userActiveThreads.ts";
 import { warmBlockSet } from "./queries/userBlocks.ts";
@@ -1234,9 +1235,21 @@ export async function createAppserver(
         // operator see whether load is spreading across the pool and the three
         // shared-DB workers or collapsing onto one — and whether the
         // connection cache is at its ceiling or still climbing.
+        //
+        // Alongside it, both halves of a DB round-trip: `wait` is enqueue to
+        // reply, `statement` is the worker's own execution. Read together they
+        // separate a queue build-up from statements that genuinely got slower
+        // — a distinction `/metrics` alone leaves to a query author, and one
+        // the `[db-slow]` threshold cannot make at all.
         const stats = await poolStats();
         return new Response(
-          JSON.stringify(stats ? { enabled: true, ...stats } : { enabled: false }),
+          JSON.stringify({
+            ...(stats ? { enabled: true, ...stats } : { enabled: false }),
+            dbLatencySeconds: {
+              wait: metrics.histogramSeries(DB_WAIT_METRIC),
+              statement: metrics.histogramSeries(DB_STATEMENT_METRIC),
+            },
+          }),
           { headers: { "content-type": "application/json", ...corsHeaders } },
         );
       }

@@ -158,10 +158,30 @@ const dbTimeouts = metrics.counter(
 const DB_WAIT_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
 const DB_DEPTH_BUCKETS = [0, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64];
 
+/**
+ * The two halves of a DB round-trip as metric families: `wait` is enqueue to
+ * reply (all of it the caller can observe), `statement` is the worker's own
+ * execution inside the handler. Reading one against the other separates
+ * "queued behind other work" from "the statements themselves got slower".
+ * `/health/pool` reads both back by these names.
+ */
+export const DB_WAIT_METRIC = "roomy_db_wait_seconds";
+export const DB_STATEMENT_METRIC = "roomy_db_statement_seconds";
+
 const dbWait = metrics.histogram(
-  "roomy_db_wait_seconds",
+  DB_WAIT_METRIC,
   "Time a DB request waited on its worker link before the worker replied, by request type and worker. Rises with queueing or with a worker blocked inside a request.",
   ["type", "worker"],
+  DB_WAIT_BUCKETS,
+);
+
+// Labelled by request type and target DB — both bounded enums — and never by
+// SQL text or space DID: either would make the series count grow with traffic.
+// Same buckets as `dbWait`, since the observed magnitudes are the same.
+const dbStatement = metrics.histogram(
+  DB_STATEMENT_METRIC,
+  "Time the DB worker spent executing a request, by request type and target DB. Excludes queue time: `roomy_db_wait_seconds` minus this is how long the request waited behind earlier work.",
+  ["type", "targetDb"],
   DB_WAIT_BUCKETS,
 );
 
@@ -191,7 +211,7 @@ export class WorkerLink {
 
     this.#worker.onmessage = (event: MessageEvent) => {
       const data = event.data as WorkerResponse;
-      const { id, result, error, slowMs } = data;
+      const { id, result, error, slowMs, selfMs } = data;
       const entry = this.#pending.get(id);
       if (!entry) return;
       this.#pending.delete(id);
@@ -204,6 +224,22 @@ export class WorkerLink {
         { type: entry.type, worker: this.#name },
         (performance.now() - entry.startedAt) / 1000,
       );
+      // Execution time alone, as the worker measured it. Binned for EVERY
+      // request rather than only the ones over the slow threshold: that is
+      // what makes a uniform slowdown (every statement 5× slower) a visible
+      // shift in the distribution instead of a threshold never crossed.
+      if (selfMs !== undefined) {
+        // Attribution mirrors the posted message, `{ ...req, ...route }`: a
+        // route value wins over one carried in the body, and a request naming
+        // neither ran against the event-log DB the worker defaults to.
+        dbStatement.observe(
+          {
+            type: entry.type,
+            targetDb: entry.route?.targetDb ?? entry.req.targetDb ?? "events",
+          },
+          selfMs / 1000,
+        );
+      }
       // The worker times its own handler and hands back anything slow. Logged
       // HERE because the worker thread cannot reach the log sink (see
       // `slowMs` on WorkerResponse): without this the worker's own service
@@ -213,8 +249,6 @@ export class WorkerLink {
         log.warn("[db-slow] request", {
           worker: this.#name,
           type: entry.type,
-          // Attribution mirrors the posted message: `{ ...req, ...route }`,
-          // so a route value wins over one carried in the body.
           targetDb: entry.route?.targetDb ?? entry.req.targetDb ?? "events",
           spaceDid: entry.route?.spaceDid ?? entry.req.spaceDid,
           sql: entry.req.sql ?? entry.req.steps?.[0]?.sql,

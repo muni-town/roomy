@@ -51,6 +51,40 @@ function escapeLabel(v: string): string {
   return v.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
 }
 
+/**
+ * Quantile of a cumulative histogram, interpolated the way Prometheus'
+ * `histogram_quantile` does: the rank is placed inside the bucket that first
+ * reaches it, at the same offset within that bucket's bounds.
+ *
+ * `null` when there is nothing to report — no observations, or a rank landing
+ * in the `+Inf` bucket. Returning the top finite bound there would read as a
+ * measurement, when all it means is "above the calibrated range".
+ */
+function bucketQuantile(
+  buckets: number[],
+  counts: number[],
+  count: number,
+  q: number,
+): number | null {
+  if (count === 0) return null;
+  const rank = q * count;
+  let lower = 0;
+  for (let i = 0; i < buckets.length; i++) {
+    const upper = buckets[i]!;
+    const cumulative = counts[i]!;
+    if (cumulative >= rank) {
+      const below = i === 0 ? 0 : counts[i - 1]!;
+      const inBucket = cumulative - below;
+      const value =
+        inBucket <= 0 ? lower : lower + ((upper - lower) * (rank - below)) / inBucket;
+      // Six decimals: sub-microsecond resolution without float-noise tails.
+      return Math.round(value * 1e6) / 1e6;
+    }
+    lower = upper;
+  }
+  return null;
+}
+
 function formatLabels(labelNames: string[], labels: LabelSet): string {
   if (labelNames.length === 0) return "";
   return labelNames.map((n) => `${n}="${escapeLabel(labels[n] ?? "")}"`).join(",");
@@ -65,6 +99,17 @@ export interface GaugeHandle {
 }
 export interface HistogramHandle {
   observe(labels: LabelSet, value: number): void;
+}
+
+/** One series of a histogram family, as `histogramSeries()` reads it back. */
+export interface HistogramSeries {
+  labels: LabelSet;
+  count: number;
+  sum: number;
+  /** Median, interpolated within its bucket. `null` above the top finite bucket. */
+  p50: number | null;
+  /** 90th percentile, interpolated within its bucket. `null` above the top finite bucket. */
+  p90: number | null;
 }
 
 export class Metrics {
@@ -123,6 +168,32 @@ export class Metrics {
         }
       },
     };
+  }
+
+  /**
+   * A histogram family read back as per-label series with p50/p90, derived
+   * from the same cumulative buckets `render()` prints — one implementation of
+   * the bucket math, so a health endpoint and a PromQL query over the scrape
+   * cannot disagree. Series are ordered by their label values so repeated
+   * calls are comparable. Unknown families, and families with no observations,
+   * yield an empty list.
+   */
+  histogramSeries(name: string): HistogramSeries[] {
+    const fam = this.families.get(name);
+    if (fam?.type !== "histogram") return [];
+    return [...fam.values.values()]
+      .map((h) => ({
+        labels: h.labels,
+        count: h.count,
+        sum: h.sum,
+        p50: bucketQuantile(fam.buckets, h.counts, h.count, 0.5),
+        p90: bucketQuantile(fam.buckets, h.counts, h.count, 0.9),
+      }))
+      .sort((a, b) =>
+        labelKey(fam.labelNames, a.labels).localeCompare(
+          labelKey(fam.labelNames, b.labels),
+        ),
+      );
   }
 
   /** Render all families in Prometheus text exposition format. */

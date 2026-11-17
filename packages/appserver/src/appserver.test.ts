@@ -745,5 +745,24 @@ describe("query response cache", () => {
     }
     expect(typeof body.globalWorker.openSpaceDbs).toBe("number");
     expect(typeof body.readStateWorker.preparedStmts).toBe("number");
+
+    // Wait and execution are read together: the queue-wait distribution beside
+    // the worker's own statement distribution, so a slow route's cause is
+    // visible without a PromQL query. The probe above already round-tripped
+    // through the workers, so both families carry observations.
+    expect(Array.isArray(body.dbLatencySeconds.wait)).toBe(true);
+    expect(Array.isArray(body.dbLatencySeconds.statement)).toBe(true);
+    expect(body.dbLatencySeconds.wait.length).toBeGreaterThan(0);
+    expect(body.dbLatencySeconds.statement.length).toBeGreaterThan(0);
+    for (const s of body.dbLatencySeconds.statement) {
+      expect(typeof s.labels.type).toBe("string");
+      expect(typeof s.labels.targetDb).toBe("string");
+      expect(s.count).toBeGreaterThan(0);
+      expect(typeof s.p90).toBe("number");
+    }
+    for (const s of body.dbLatencySeconds.wait) {
+      expect(typeof s.labels.worker).toBe("string");
+      expect(typeof s.p50).toBe("number");
+    }
   });
 });
