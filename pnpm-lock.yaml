@@ -226,8 +226,8 @@ importers:
         specifier: ^0.0.4
         version: 0.0.4
       '@jimp/layout':
-        specifier: ^2.2.0
-        version: 2.2.0
+        specifier: ^2.2.1
+        version: 2.2.1
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
@@ -259,8 +259,8 @@ importers:
         specifier: ^4.0.2
         version: 4.0.2
       jimp:
-        specifier: ^2.2.0
-        version: 2.2.0
+        specifier: ^2.2.1
+        version: 2.2.1
       lru-cache:
         specifier: ^11.5.3
         version: 11.5.3
@@ -1505,148 +1505,148 @@ packages:
     resolution: {integrity: sha512-ZXRY4jNvVgSVQ8DL3LTcakaAtXwTVUxE81hslsyD2AtoXW/wVob10HkOJ1X/pAlcI7D+2YoZKg5do8G/w6RYgA==}
     engines: {node: '>=8'}
 
-  '@jimp/core@2.2.0':
-    resolution: {integrity: sha512-CmVW7ojzUXOImI4kNglfeu9Kf8iLg2B1gwrAPLsRPo74XOAgwQ3aEHTkO6wPiVmjTf+1S+WDWS2tHkv+69CmGA==}
+  '@jimp/core@2.2.1':
+    resolution: {integrity: sha512-bcMtiabqRLTHfdDRQ6J2vC8DUZOApq0fKph5oF1+04UbRm7YW7rOeteXQPpIptW38CpHgi/qASuZLAqyDwms7Q==}
     engines: {node: '>=22'}
 
-  '@jimp/diff@2.2.0':
-    resolution: {integrity: sha512-loJDor6gtBZB/SJDzu4ZZ60lKOUe51XgPCtnSGbfyj0ztBEXnihqUhu31eeyjCu7wqoco+wm+ICIsqTqc85yXQ==}
+  '@jimp/diff@2.2.1':
+    resolution: {integrity: sha512-jKVebo4wbobcGttno1THk5YDRkrdu6jFxGDVhSjuV/HErZCvop4mj9VNJrYmHntIrhHM/Lb64u4GHog25jYJ9Q==}
     engines: {node: '>=22'}
 
-  '@jimp/file-ops@2.2.0':
-    resolution: {integrity: sha512-xZdcZyTCGqVj+M9eyzbeTTO8P/qDUSBQiMeyPut0lCG9awYvLeWzMqxtm4dAqv8IYRIxoIjOLHo2hcceueHUyQ==}
+  '@jimp/file-ops@2.2.1':
+    resolution: {integrity: sha512-RoejkyrU/nXNX6EfCxp45aGsMMZdz14hz2UraigoykpSzOnoSgzclwvT7wM/9vGI/pUJ5xz/gC6/VFdMwJzRaQ==}
     engines: {node: '>=22'}
 
-  '@jimp/jpeg-js@2.2.0':
-    resolution: {integrity: sha512-tccJ4f4pwasdcHjxR5HoCo/Yxlwa4BuGhnIoBtFvjEMKFTXWUqrF1ory1iR7C865rh+0XfzP9y+HejZFlAd9DA==}
+  '@jimp/jpeg-js@2.2.1':
+    resolution: {integrity: sha512-vUwAzsJLioxLPLAHuWGG+bjN3VstT10WnFF1Q5pfVEw5MGBAjaLAf5sFW4beFn4cNjGWDi97R2PNqlV1iZmoaw==}
     engines: {node: '>=22'}
 
-  '@jimp/js-bmp@2.2.0':
-    resolution: {integrity: sha512-HxtPvGqsQB+G9jpWSYWe/EbDf/FBNcBzOIm2En1d64gKTidGUrbA/yDVbP8vW7sp0bywmxHCYP89jpBH0tIzoQ==}
+  '@jimp/js-bmp@2.2.1':
+    resolution: {integrity: sha512-wVO2Qp0e6ckBkI0ZRLfw3EL0n9Gg+8G5Vxp6oDMSiKoG12D39L4BMXOQLBQW+19OLAB2HLh1Q6KMYrq0ZxZiyA==}
     engines: {node: '>=22'}
 
-  '@jimp/js-gif@2.2.0':
-    resolution: {integrity: sha512-K4h3n5XHk6sZCbWkjC593yFNBFut5fP7kyCwqiKSq1jQGgV1Hooj/gtICB00yrW/tJYES2bqWBZnS42E2fldzg==}
+  '@jimp/js-gif@2.2.1':
+    resolution: {integrity: sha512-Bbzjy4bOni0RZLAdqXu7zMYC1e3ktpVXYLPJ4qoxUeDWM668t/K4oGZef9rj3NWgxKS5u9KavOMvusCmsnWoBg==}
     engines: {node: '>=22'}
 
-  '@jimp/js-ico@2.2.0':
-    resolution: {integrity: sha512-FxLNXVwIgsEbmzsI4CwMRni1+PhRtpGACB3XlutGLSsu46pQAxBCdXz76v8WlU4A4ACHzkjjf19VK1v5F/YZvA==}
+  '@jimp/js-ico@2.2.1':
+    resolution: {integrity: sha512-06+uJd+TmYYpVSyX3N+ZmEJgO2GUI7J1wha8ad4x7QJxwKTl7wGYM/cd1PxQc7MDmyKWvCdgzpkrxp/kSVozww==}
     engines: {node: '>=22'}
 
-  '@jimp/js-jpeg@2.2.0':
-    resolution: {integrity: sha512-43twL7Q2Q3RX4z2MoD4jZtttRGISLNh42ud4IZ6NEb24O1aYnWEBH7C8TaRK1kod5xIJqonMp0soii4qqiRWUA==}
+  '@jimp/js-jpeg@2.2.1':
+    resolution: {integrity: sha512-A2ciFC2VOkpSkMqO23qF26B1olkPvyiOPowQj2UYV27+BqGkAiJFoFPAESaFJyXjkvxVlZKTxeeK/vU4pJkudg==}
     engines: {node: '>=22'}
 
-  '@jimp/js-png@2.2.0':
-    resolution: {integrity: sha512-DAiO2O/QBErb3E8QBCcfVJAVVxABABwHUe45g3bLLG9sAtT7vBIN+2TkCyglKI40/TYIWMV/O4wQZ7AKf9ztCA==}
+  '@jimp/js-png@2.2.1':
+    resolution: {integrity: sha512-Dj2/ymRQpHx/A8R1fEV8EGCTvmBjxv6WEB565voxK9uK6IPbO8GIQ2zhRkZGtksGSwQwsdwaCd3eMgQu4VC+uQ==}
     engines: {node: '>=22'}
 
-  '@jimp/js-tiff@2.2.0':
-    resolution: {integrity: sha512-6HJRRo9SbUljdx5rvUyol/F0ePDI0jQcnQV3KwepuEwiKnwZ7Jh03DceX/g4BjYF28ReBhuI+ptSSGkeuC7eOA==}
+  '@jimp/js-tiff@2.2.1':
+    resolution: {integrity: sha512-A2B+g00t6SCTML97h5Bvq1/qcmbGq4vZKR4+nN1bJSZP/pw3WgpaXQhTf8utpfbD3YoE4RlWVoenle4z58WZXA==}
     engines: {node: '>=22'}
 
-  '@jimp/layout@2.2.0':
-    resolution: {integrity: sha512-XPqO/th69QSadQGSw/n7rbMtShM/NBYr/pdzTIsPXYo7FysO4DxvMQOOaZZCU9zmv/sLsCkeRTgYZAYZAZyi/A==}
+  '@jimp/layout@2.2.1':
+    resolution: {integrity: sha512-zhOzYNKV8RLXQ+KBDye+ItmrxEWlh/z+YTNaPnawJ+QUoxtaUNW58LV2XeBXUkLd4NF8bYJfXBmMLONa1ud9og==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-blit@2.2.0':
-    resolution: {integrity: sha512-LbTl4vr5CQ5Jk1O8CBiRNVlNQ5d6FVP2nnt7CkDDkXhhizHsuBbW2/kZs10pbMs9VyQx6c6m+JyoYVbRdRMlQw==}
+  '@jimp/plugin-blit@2.2.1':
+    resolution: {integrity: sha512-5p6fp8rDPuv6jOdFsEmyKk+i+VtFQC5N80b2BR0dfbcS+61locFl4I9UIzGKetZ3M2jtKTukTI3AK61wuh2OHg==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-blur@2.2.0':
-    resolution: {integrity: sha512-Ps7DCa7ZaIu0jTsFpMC6WDUG2cR0iS/I4ABp02ma8SIBxj3KgmuSCHdCXsfU2C4KtnSncA3je5ZFgnoWWtbEBA==}
+  '@jimp/plugin-blur@2.2.1':
+    resolution: {integrity: sha512-4k031jBgkqkGF+motPu72Zb2Z8/ETqM8e4csZbk0wmJWnfKXCRp19c/soW+3AWr0KahMEvwMPAIUqHTHy556aA==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-border@2.2.0':
-    resolution: {integrity: sha512-+TThA/BWxjXZjYeu+6M06g3dzjv2LjKX1ytj/4j4QZA3B2CLJ9lbVs/1UDdo8R6oKmfacTeKTI1V+w/KbWO9jg==}
+  '@jimp/plugin-border@2.2.1':
+    resolution: {integrity: sha512-drWtd/xH1Wavh/tal5NwbTuIlhnGm91lizNGxk8UuYmCwNB2wZ0nze9ACsiFAftY4jrHKSuVo60MRFyKobQsPA==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-circle@2.2.0':
-    resolution: {integrity: sha512-MEwPdQtSQ4dstShwgnV3vZdi5Gyg/P9C8SVGKQ7Zz3ZFVrvcflfHiojmTsQPrFHraduvlfij+TBUQDy1aQ3/fg==}
+  '@jimp/plugin-circle@2.2.1':
+    resolution: {integrity: sha512-6fFUBOxzZsTMTy8Ml1aAR2aWCF1fkPndmJoDZGuUKNi5FJEuUNfjBw4qMyaXsGQHSqWN/tDtghuX8Xgo/ern3w==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-color@2.2.0':
-    resolution: {integrity: sha512-FHan68qIfowxmWIMzWKm6cljwVQvYIVDJW5QK4XBH4hnHVIfFphmBZ9NPZnCSkWDjVzmQChXRqOA/VCGNP+AzQ==}
+  '@jimp/plugin-color@2.2.1':
+    resolution: {integrity: sha512-pAjV9HqPRWQ1rGbWRgLqNzzfM/3c8RxoDBfLwJswgfnQkPmyZFq0nOm0/FLdfBXTwulJ2DiQ51ZNhgVJeJUlbQ==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-contain@2.2.0':
-    resolution: {integrity: sha512-TegR/pBMS4UWe9RO8aIeaCOdNYrWIGM7B7yZW+Xq0ITRcbAvHymQXZFtXfi10GS7EqKjZBcUCXx2yGZUuXISBQ==}
+  '@jimp/plugin-contain@2.2.1':
+    resolution: {integrity: sha512-pR+2vT6wQqPBXDyTHIQljWmgiRld1rTEOfnBRWN7musvzl/1kfPjZTLior3vBtwoHU4LIrBNVDwW8rM/3HjKWA==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-cover@2.2.0':
-    resolution: {integrity: sha512-90cHWyo5aVnjtkPWvrTJDHB/C4xG1YMiK/gMaLmEOqePIBMOMKwLVfzSraa1YCfYpvyf/snjcK5k5tyUoc2oWA==}
+  '@jimp/plugin-cover@2.2.1':
+    resolution: {integrity: sha512-bSYHF3Vj5UIHyXmHImTNKSAmT7BPyQDrBJGGVPyFWp8uZMmYVL1d3td/K2k8j0ISolTuOIlDSEORmU18YZxaVA==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-crop@2.2.0':
-    resolution: {integrity: sha512-uy1ZlTRanFaCH11lZ0p52zeW6DYkGId974F7edKEmOdkd2VepXSKmpFFXl2wdMcCagXLd4LpiHNFU9MjzUcelA==}
+  '@jimp/plugin-crop@2.2.1':
+    resolution: {integrity: sha512-qrk9smh2/Hfy9nEyoRBgVyUJzmBtoJVxvbA0r4UDAgQ4PiNo5d6lltkCUmL/UBW+oQ5MoVtcK/JVcIidcBUfVw==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-displace@2.2.0':
-    resolution: {integrity: sha512-6paiOs8bMZWMfZ4WZO7xF1P2o5yzc9omUI3jo2VNr7aS33Jz4VH8XGvPXy+IS2ZQzbIR2LdUdOIZyHi1im9u0Q==}
+  '@jimp/plugin-displace@2.2.1':
+    resolution: {integrity: sha512-7xk89ALgMxfNJ9CAlwfeTV8glAEQM1xXHwgUmx46FYtD2g3HNK8HctnPOlZhvzmzXUp4ig7jTf0gdnqRwp8rqg==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-dither@2.2.0':
-    resolution: {integrity: sha512-Y1JaAdBiqFpj31cYy47odaRavKGGB5EmUC9RCCqxRmQFFD3mRNan8cMXlkDqHiDLbmnioaRKeBhu/UbKqXeP+w==}
+  '@jimp/plugin-dither@2.2.1':
+    resolution: {integrity: sha512-t9pvOiv4JgtrYrGGYltzV+JlkgsjS6xtHWKWpKvlv3ecf5aejIzKgoTPLBhFApPttRPraWXsn08hT6TkGmzUSg==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-draw@2.2.0':
-    resolution: {integrity: sha512-JW5UQvmNL65UtvxW6bGDNyp4i9hBTMWs7SoKYyVRq/wJUZlTMhRVS1MXQTNT6N3wSYz4BtO+jMa3yh9lH8fE/Q==}
+  '@jimp/plugin-draw@2.2.1':
+    resolution: {integrity: sha512-poHIOZvxLMH5Nxt4fg1y7kZ2pA+6Tqv5C+YnHeFBXkuSMoryAYWF4Nrohp+cntAmiU73xMrVXNdPZYF6O2exew==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-fisheye@2.2.0':
-    resolution: {integrity: sha512-wds1zGW29DEXLEXeeScQhilY7hX3mWSxdUBF8kQ0q/HhtCF2aLpnSgcajiVvntr0NrPwEw60ChCKj0uQ5NcceQ==}
+  '@jimp/plugin-fisheye@2.2.1':
+    resolution: {integrity: sha512-AJXW2uFp47i7GBkqJsM+IdKsOAFm7ebwqJGPAqK4KCK8vMfPgvzj40tKLJI3KRD06IMvlHu20sbIh7toahuaUg==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-flip@2.2.0':
-    resolution: {integrity: sha512-KnwBFHtciIjy39x2YkWg7BdtLBXKnMnJkEVDIHQUJ+B0hN0zYeyAzNjqTAArsv8JheWEKiptbUMKgl5QAahKPw==}
+  '@jimp/plugin-flip@2.2.1':
+    resolution: {integrity: sha512-w1m0YVfCYstcv9V7s+q3/0F5GuACUN0KwAeFxXOJyPMyePY02nshyKiqXmyEAzc7zuXH7qVbhEE0y7RAko8+4g==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-hash@2.2.0':
-    resolution: {integrity: sha512-Qe7v7c+G2M8NCUc6go+vkek3yAzgfjN8YJ0dSPvrFY+Fiyaq9zSwzw20v3d7xvj/TGChwXCF9BmRP94TfRSb5g==}
+  '@jimp/plugin-hash@2.2.1':
+    resolution: {integrity: sha512-xO93MfY+3/dpCt0qcogYCdUTsHmsW5w7bk3MRyW5ZdJRV+pIe2GRlWQZKiebvaFjHKFIHu7zIxoweq0LxhbgLA==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-lut@2.2.0':
-    resolution: {integrity: sha512-ZChZ1YfIJlFAG1/Kxw5vrdyg3nJcNV6duE4zBcZX4YC8pKBxG8x4u7/f8PD572sjIlcxc4f6EGa/R3OAnay3Ug==}
+  '@jimp/plugin-lut@2.2.1':
+    resolution: {integrity: sha512-hfXKZU13L9cbahLosdrxh8SW3CdC6GaefA6z23tJC+vamIoOZhG4YehpIDSfnuWBRaCOMv+oSqwe3a/nIv10dQ==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-mask@2.2.0':
-    resolution: {integrity: sha512-8TH4xR1KH8row3OqYJPDqnf+1o8a1K6lv2Wt63UN7tuoyjllPoJ22RwyWDxMFXJPzrndRDekuo+8ZBsdVjrcdQ==}
+  '@jimp/plugin-mask@2.2.1':
+    resolution: {integrity: sha512-YOzB7fYcB6c0Dtnc5b43KtCiB8ui00xAWFgMF+dLQvlwtUg7J8smfBxdj2tSfWP8G0zaAy/+t4QVAeRWXQy/Ig==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-morphology@2.2.0':
-    resolution: {integrity: sha512-0IR8+0rzQvsOHr0RQcEVPaFkC2EnjrczRL5nZN7toXUd9p/tQz7YL4gD/3N+lGdiS0RUBL+Vx8eSdi/QDTkhmg==}
+  '@jimp/plugin-morphology@2.2.1':
+    resolution: {integrity: sha512-C2rznfELmeqiyD9yKL8H+obRszZu1EezsUTlQSMMj0zEohxpGVWnFsl1KO9eg4LuiDqGbJ5hNseXmKSZ0ZgWQA==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-print@2.2.0':
-    resolution: {integrity: sha512-FvWPvMuckeK/FyWkT0QtSa/WuZhw/YxFV1TR/FgBMGUZGTRfbK67viIhVMd8NnHPR9yeSR8GT0Pso41l6rwBdQ==}
+  '@jimp/plugin-print@2.2.1':
+    resolution: {integrity: sha512-pLozBTQnNB0sMWmtJyvxH/blVYND9NjGRHHYr88TSYFnnQChKJL5pIbPPtRkzExM75YkR+M4y3BRav5thiBoww==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-quantize@2.2.0':
-    resolution: {integrity: sha512-/IvyDUqaqSEZoD9kc41pSXuDhK2V3Rq2HfdFtRBb3ULO/uEZtzXDQ69ywOipedSd+AhvczRC8PGfWd/pA24z/w==}
+  '@jimp/plugin-quantize@2.2.1':
+    resolution: {integrity: sha512-PANlAyKJvA1LHwW0ZjT26D/JhFLbeDKD7NunASse4f6KjWVJyI0L1yjOS9+0JuXKoGR9dZtdEc6HktOCey0Sdw==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-resize@2.2.0':
-    resolution: {integrity: sha512-mus87/noURyBNE9YcOMf9Hc67gSuggkr8fiBcsxmNvNQyZjyHxGxH9Aos9JkphUMbyVqRYlZpw7O2yUSfZmteA==}
+  '@jimp/plugin-resize@2.2.1':
+    resolution: {integrity: sha512-tLIOXbP7VAFzCCnaQkvX6+g4/l7am88oj8j/S9fS+7PbmyQ4AmS1NgcGDXQcJPqWeBUSAj7BsM54rnuyaWXt+A==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-rotate@2.2.0':
-    resolution: {integrity: sha512-4/sM0wRTxJ/dxPbqTkrCuYcahr99zm4jpIjuvQ/ayl17kU+gvzgG3pKXiQFPYeNOvG1gO54OIYFU8Xcii5ibnA==}
+  '@jimp/plugin-rotate@2.2.1':
+    resolution: {integrity: sha512-UULlV8E1aXQgIQ2Meq777EsC49bk2vhU0iTjWIm8ZwMUbwSqLklKsfqXxtHHcTli9PkCoox28bCMSsjjXY38ZA==}
     engines: {node: '>=22'}
 
-  '@jimp/plugin-threshold@2.2.0':
-    resolution: {integrity: sha512-nCOMmlGtuc3fN07Tx6Lp5OcRqnRgxpyCw0OR13XIZHmRvqwm0Winjjhd4GLOVdJfp3z+jMfPlARLI+ppxrvXlA==}
+  '@jimp/plugin-threshold@2.2.1':
+    resolution: {integrity: sha512-W4Hos1lRTmswIUbppeZVNvprZMV6EeEEwJvv8c4KsrOgI+gb7uql6KXmXofIU7+RrCtS/jJtJ1edLbk/jS1ZPg==}
     engines: {node: '>=22'}
 
-  '@jimp/pngjs@2.2.0':
-    resolution: {integrity: sha512-ojef1Azxh2OUxRsTlOpYFW7Hr1ljvArBeR5IRgZEKMClzbMCyjSnFYdu2wds4AccaDlSB+Y1slcUvDGkWl5y3Q==}
+  '@jimp/pngjs@2.2.1':
+    resolution: {integrity: sha512-9z1ZAzpsjRUYamilYrxyfdNFTBi2i0mcahZ8V2+A/pAWs8YV/LlHztnYA/IDx8XG9qlwVL6FjrjdLckHYHxx7g==}
     engines: {node: '>=22'}
 
-  '@jimp/types@2.2.0':
-    resolution: {integrity: sha512-R9CcqtwL4kkMVdONtUaOwoo5m+ggHpZ0Oiqg2lRbc3y0pAcAtwCwzp07/nD0pNqmCrq61z1t5tzGCkCMMfMqNQ==}
+  '@jimp/types@2.2.1':
+    resolution: {integrity: sha512-aazTwDaMIPYblgfP/dif2HcaJUnbWzYSsvsQiLP1Hn559DKGH2okDzDi6ZM85Bb1i9vG+Qm4dBcj6GgvnPvOSw==}
     engines: {node: '>=22'}
 
-  '@jimp/utils@2.2.0':
-    resolution: {integrity: sha512-f+5gT15ENJj3RLD71kGrI1fXuMyqUFFKPbnDRBmK/GwQcMz09HUxvv9Cr7zWZxpc2/KVIYwvBwYKtfz3C9EyYA==}
+  '@jimp/utils@2.2.1':
+    resolution: {integrity: sha512-R6l1xV75BhL6dh0viqCDEy+t6GAOh1vr5j18pC8aMYpeKXCW/wVA4znXhuP/kOVBIRF9R5U9Kbnn+GRxzmh0QA==}
     engines: {node: '>=22'}
 
   '@jis3r/icons@2.7.0':
@@ -3651,8 +3651,8 @@ packages:
   jackspeak@3.4.3:
     resolution: {integrity: sha512-OGlZQpz2yfahA/Rd1Y8Cd9SIEsqvXkLVoSw/cgwhnhFMDbsQFeZYoJJ7bIZBS9BcamUW96asq/npPWugM+RQBw==}
 
-  jimp@2.2.0:
-    resolution: {integrity: sha512-aqvw4nQAXSCIV8MkWIhX3FlmLO1e0hZFlknbUYUcNmP69axgEEMLNvGLFMLAijFeoFhobP/iLTG67lxgpJuMRQ==}
+  jimp@2.2.1:
+    resolution: {integrity: sha512-ld6ur69klQBWsdqx3BsUlxDWqwTkWnLEGeVCNS3oi+8v6egkT0DzdkibiSnqlUvyN64f6ghzmfdk5Yf4llg9CQ==}
     engines: {node: '>=22'}
 
   jiti@2.5.1:
@@ -6273,11 +6273,11 @@ snapshots:
 
   '@istanbuljs/schema@0.1.3': {}
 
-  '@jimp/core@2.2.0':
+  '@jimp/core@2.2.1':
     dependencies:
-      '@jimp/file-ops': 2.2.0
-      '@jimp/types': 2.2.0
-      '@jimp/utils': 2.2.0
+      '@jimp/file-ops': 2.2.1
+      '@jimp/types': 2.2.1
+      '@jimp/utils': 2.2.1
       await-to-js: 3.0.0
       buffer: 6.0.3
       exif-parser: 0.1.12
@@ -6287,222 +6287,222 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@jimp/diff@2.2.0':
+  '@jimp/diff@2.2.1':
     dependencies:
-      '@jimp/plugin-resize': 2.2.0
-      '@jimp/types': 2.2.0
-      '@jimp/utils': 2.2.0
+      '@jimp/plugin-resize': 2.2.1
+      '@jimp/types': 2.2.1
+      '@jimp/utils': 2.2.1
       pixelmatch: 5.3.0
       zod: 4.6.7
     transitivePeerDependencies:
       - supports-color
 
-  '@jimp/file-ops@2.2.0': {}
+  '@jimp/file-ops@2.2.1': {}
 
-  '@jimp/jpeg-js@2.2.0': {}
+  '@jimp/jpeg-js@2.2.1': {}
 
-  '@jimp/js-bmp@2.2.0':
+  '@jimp/js-bmp@2.2.1':
     dependencies:
-      '@jimp/core': 2.2.0
-      '@jimp/types': 2.2.0
-      '@jimp/utils': 2.2.0
+      '@jimp/core': 2.2.1
+      '@jimp/types': 2.2.1
+      '@jimp/utils': 2.2.1
       bmp-ts: 1.2.0
       image-q: 4.0.0
     transitivePeerDependencies:
       - supports-color
 
-  '@jimp/js-gif@2.2.0':
+  '@jimp/js-gif@2.2.1':
     dependencies:
-      '@jimp/core': 2.2.0
-      '@jimp/types': 2.2.0
+      '@jimp/core': 2.2.1
+      '@jimp/types': 2.2.1
       buffer: 6.0.3
     transitivePeerDependencies:
       - supports-color
 
-  '@jimp/js-ico@2.2.0':
+  '@jimp/js-ico@2.2.1':
     dependencies:
-      '@jimp/js-png': 2.2.0
-      '@jimp/plugin-resize': 2.2.0
-      '@jimp/types': 2.2.0
+      '@jimp/js-png': 2.2.1
+      '@jimp/plugin-resize': 2.2.1
+      '@jimp/types': 2.2.1
       bmp-ts: 1.2.0
       buffer: 6.0.3
     transitivePeerDependencies:
       - supports-color
 
-  '@jimp/js-jpeg@2.2.0':
+  '@jimp/js-jpeg@2.2.1':
     dependencies:
-      '@jimp/core': 2.2.0
-      '@jimp/jpeg-js': 2.2.0
-      '@jimp/types': 2.2.0
+      '@jimp/core': 2.2.1
+      '@jimp/jpeg-js': 2.2.1
+      '@jimp/types': 2.2.1
     transitivePeerDependencies:
       - supports-color
 
-  '@jimp/js-png@2.2.0':
+  '@jimp/js-png@2.2.1':
     dependencies:
-      '@jimp/core': 2.2.0
-      '@jimp/pngjs': 2.2.0
-      '@jimp/types': 2.2.0
+      '@jimp/core': 2.2.1
+      '@jimp/pngjs': 2.2.1
+      '@jimp/types': 2.2.1
     transitivePeerDependencies:
       - supports-color
 
-  '@jimp/js-tiff@2.2.0':
+  '@jimp/js-tiff@2.2.1':
     dependencies:
-      '@jimp/core': 2.2.0
-      '@jimp/types': 2.2.0
+      '@jimp/core': 2.2.1
+      '@jimp/types': 2.2.1
       buffer: 6.0.3
       utif2: 4.1.0
     transitivePeerDependencies:
       - supports-color
 
-  '@jimp/layout@2.2.0':
+  '@jimp/layout@2.2.1':
     dependencies:
-      '@jimp/core': 2.2.0
-      '@jimp/plugin-border': 2.2.0
-      '@jimp/plugin-contain': 2.2.0
-      '@jimp/plugin-cover': 2.2.0
-      '@jimp/plugin-draw': 2.2.0
-      '@jimp/plugin-print': 2.2.0
-      '@jimp/plugin-resize': 2.2.0
-      '@jimp/types': 2.2.0
-      '@jimp/utils': 2.2.0
+      '@jimp/core': 2.2.1
+      '@jimp/plugin-border': 2.2.1
+      '@jimp/plugin-contain': 2.2.1
+      '@jimp/plugin-cover': 2.2.1
+      '@jimp/plugin-draw': 2.2.1
+      '@jimp/plugin-print': 2.2.1
+      '@jimp/plugin-resize': 2.2.1
+      '@jimp/types': 2.2.1
+      '@jimp/utils': 2.2.1
       zod: 4.6.7
     transitivePeerDependencies:
       - supports-color
 
-  '@jimp/plugin-blit@2.2.0':
+  '@jimp/plugin-blit@2.2.1':
     dependencies:
-      '@jimp/types': 2.2.0
-      '@jimp/utils': 2.2.0
+      '@jimp/types': 2.2.1
+      '@jimp/utils': 2.2.1
       zod: 4.6.7
 
-  '@jimp/plugin-blur@2.2.0':
+  '@jimp/plugin-blur@2.2.1':
     dependencies:
-      '@jimp/core': 2.2.0
-      '@jimp/utils': 2.2.0
+      '@jimp/core': 2.2.1
+      '@jimp/utils': 2.2.1
       zod: 4.6.7
     transitivePeerDependencies:
       - supports-color
 
-  '@jimp/plugin-border@2.2.0':
+  '@jimp/plugin-border@2.2.1':
     dependencies:
-      '@jimp/types': 2.2.0
-      '@jimp/utils': 2.2.0
+      '@jimp/types': 2.2.1
+      '@jimp/utils': 2.2.1
       buffer: 6.0.3
       zod: 4.6.7
 
-  '@jimp/plugin-circle@2.2.0':
+  '@jimp/plugin-circle@2.2.1':
     dependencies:
-      '@jimp/types': 2.2.0
+      '@jimp/types': 2.2.1
       zod: 4.6.7
 
-  '@jimp/plugin-color@2.2.0':
+  '@jimp/plugin-color@2.2.1':
     dependencies:
-      '@jimp/core': 2.2.0
-      '@jimp/types': 2.2.0
-      '@jimp/utils': 2.2.0
-      buffer: 6.0.3
-      zod: 4.6.7
-    transitivePeerDependencies:
-      - supports-color
-
-  '@jimp/plugin-contain@2.2.0':
-    dependencies:
-      '@jimp/core': 2.2.0
-      '@jimp/plugin-blit': 2.2.0
-      '@jimp/plugin-resize': 2.2.0
-      '@jimp/types': 2.2.0
-      '@jimp/utils': 2.2.0
-      zod: 4.6.7
-    transitivePeerDependencies:
-      - supports-color
-
-  '@jimp/plugin-cover@2.2.0':
-    dependencies:
-      '@jimp/core': 2.2.0
-      '@jimp/plugin-crop': 2.2.0
-      '@jimp/plugin-resize': 2.2.0
-      '@jimp/types': 2.2.0
-      zod: 4.6.7
-    transitivePeerDependencies:
-      - supports-color
-
-  '@jimp/plugin-crop@2.2.0':
-    dependencies:
-      '@jimp/core': 2.2.0
-      '@jimp/types': 2.2.0
-      '@jimp/utils': 2.2.0
+      '@jimp/core': 2.2.1
+      '@jimp/types': 2.2.1
+      '@jimp/utils': 2.2.1
       buffer: 6.0.3
       zod: 4.6.7
     transitivePeerDependencies:
       - supports-color
 
-  '@jimp/plugin-displace@2.2.0':
+  '@jimp/plugin-contain@2.2.1':
     dependencies:
-      '@jimp/types': 2.2.0
-      '@jimp/utils': 2.2.0
+      '@jimp/core': 2.2.1
+      '@jimp/plugin-blit': 2.2.1
+      '@jimp/plugin-resize': 2.2.1
+      '@jimp/types': 2.2.1
+      '@jimp/utils': 2.2.1
+      zod: 4.6.7
+    transitivePeerDependencies:
+      - supports-color
+
+  '@jimp/plugin-cover@2.2.1':
+    dependencies:
+      '@jimp/core': 2.2.1
+      '@jimp/plugin-crop': 2.2.1
+      '@jimp/plugin-resize': 2.2.1
+      '@jimp/types': 2.2.1
+      zod: 4.6.7
+    transitivePeerDependencies:
+      - supports-color
+
+  '@jimp/plugin-crop@2.2.1':
+    dependencies:
+      '@jimp/core': 2.2.1
+      '@jimp/types': 2.2.1
+      '@jimp/utils': 2.2.1
+      buffer: 6.0.3
+      zod: 4.6.7
+    transitivePeerDependencies:
+      - supports-color
+
+  '@jimp/plugin-displace@2.2.1':
+    dependencies:
+      '@jimp/types': 2.2.1
+      '@jimp/utils': 2.2.1
       zod: 4.6.7
 
-  '@jimp/plugin-dither@2.2.0':
+  '@jimp/plugin-dither@2.2.1':
     dependencies:
-      '@jimp/types': 2.2.0
+      '@jimp/types': 2.2.1
       zod: 4.6.7
 
-  '@jimp/plugin-draw@2.2.0':
+  '@jimp/plugin-draw@2.2.1':
     dependencies:
-      '@jimp/types': 2.2.0
-      '@jimp/utils': 2.2.0
+      '@jimp/types': 2.2.1
+      '@jimp/utils': 2.2.1
       zod: 4.6.7
 
-  '@jimp/plugin-fisheye@2.2.0':
+  '@jimp/plugin-fisheye@2.2.1':
     dependencies:
-      '@jimp/types': 2.2.0
-      '@jimp/utils': 2.2.0
+      '@jimp/types': 2.2.1
+      '@jimp/utils': 2.2.1
       zod: 4.6.7
 
-  '@jimp/plugin-flip@2.2.0':
+  '@jimp/plugin-flip@2.2.1':
     dependencies:
-      '@jimp/types': 2.2.0
+      '@jimp/types': 2.2.1
       buffer: 6.0.3
       zod: 4.6.7
 
-  '@jimp/plugin-hash@2.2.0':
+  '@jimp/plugin-hash@2.2.1':
     dependencies:
-      '@jimp/core': 2.2.0
-      '@jimp/js-bmp': 2.2.0
-      '@jimp/js-jpeg': 2.2.0
-      '@jimp/js-png': 2.2.0
-      '@jimp/js-tiff': 2.2.0
-      '@jimp/plugin-resize': 2.2.0
-      '@jimp/types': 2.2.0
-      '@jimp/utils': 2.2.0
+      '@jimp/core': 2.2.1
+      '@jimp/js-bmp': 2.2.1
+      '@jimp/js-jpeg': 2.2.1
+      '@jimp/js-png': 2.2.1
+      '@jimp/js-tiff': 2.2.1
+      '@jimp/plugin-resize': 2.2.1
+      '@jimp/types': 2.2.1
+      '@jimp/utils': 2.2.1
       any-base: 1.1.0
       zod: 4.6.7
     transitivePeerDependencies:
       - supports-color
 
-  '@jimp/plugin-lut@2.2.0':
+  '@jimp/plugin-lut@2.2.1':
     dependencies:
-      '@jimp/types': 2.2.0
+      '@jimp/types': 2.2.1
       zod: 4.6.7
 
-  '@jimp/plugin-mask@2.2.0':
+  '@jimp/plugin-mask@2.2.1':
     dependencies:
-      '@jimp/types': 2.2.0
+      '@jimp/types': 2.2.1
       zod: 4.6.7
 
-  '@jimp/plugin-morphology@2.2.0':
+  '@jimp/plugin-morphology@2.2.1':
     dependencies:
-      '@jimp/types': 2.2.0
+      '@jimp/types': 2.2.1
       zod: 4.6.7
 
-  '@jimp/plugin-print@2.2.0':
+  '@jimp/plugin-print@2.2.1':
     dependencies:
-      '@jimp/core': 2.2.0
-      '@jimp/js-jpeg': 2.2.0
-      '@jimp/js-png': 2.2.0
-      '@jimp/plugin-blit': 2.2.0
-      '@jimp/plugin-draw': 2.2.0
-      '@jimp/types': 2.2.0
+      '@jimp/core': 2.2.1
+      '@jimp/js-jpeg': 2.2.1
+      '@jimp/js-png': 2.2.1
+      '@jimp/plugin-blit': 2.2.1
+      '@jimp/plugin-draw': 2.2.1
+      '@jimp/types': 2.2.1
       buffer: 6.0.3
       opentype.js: 2.0.0
       parse-bmfont-ascii: 1.0.6
@@ -6513,54 +6513,54 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@jimp/plugin-quantize@2.2.0':
+  '@jimp/plugin-quantize@2.2.1':
     dependencies:
       buffer: 6.0.3
       image-q: 4.0.0
       zod: 4.6.7
 
-  '@jimp/plugin-resize@2.2.0':
+  '@jimp/plugin-resize@2.2.1':
     dependencies:
-      '@jimp/core': 2.2.0
-      '@jimp/types': 2.2.0
+      '@jimp/core': 2.2.1
+      '@jimp/types': 2.2.1
       buffer: 6.0.3
       zod: 4.6.7
     transitivePeerDependencies:
       - supports-color
 
-  '@jimp/plugin-rotate@2.2.0':
+  '@jimp/plugin-rotate@2.2.1':
     dependencies:
-      '@jimp/core': 2.2.0
-      '@jimp/plugin-resize': 2.2.0
-      '@jimp/types': 2.2.0
-      '@jimp/utils': 2.2.0
+      '@jimp/core': 2.2.1
+      '@jimp/plugin-resize': 2.2.1
+      '@jimp/types': 2.2.1
+      '@jimp/utils': 2.2.1
       buffer: 6.0.3
       zod: 4.6.7
     transitivePeerDependencies:
       - supports-color
 
-  '@jimp/plugin-threshold@2.2.0':
+  '@jimp/plugin-threshold@2.2.1':
     dependencies:
-      '@jimp/core': 2.2.0
-      '@jimp/plugin-color': 2.2.0
-      '@jimp/plugin-hash': 2.2.0
-      '@jimp/types': 2.2.0
-      '@jimp/utils': 2.2.0
+      '@jimp/core': 2.2.1
+      '@jimp/plugin-color': 2.2.1
+      '@jimp/plugin-hash': 2.2.1
+      '@jimp/types': 2.2.1
+      '@jimp/utils': 2.2.1
       zod: 4.6.7
     transitivePeerDependencies:
       - supports-color
 
-  '@jimp/pngjs@2.2.0':
+  '@jimp/pngjs@2.2.1':
     dependencies:
       pako: 3.0.3
 
-  '@jimp/types@2.2.0':
+  '@jimp/types@2.2.1':
     dependencies:
       zod: 4.6.7
 
-  '@jimp/utils@2.2.0':
+  '@jimp/utils@2.2.1':
     dependencies:
-      '@jimp/types': 2.2.0
+      '@jimp/types': 2.2.1
       buffer: 6.0.3
       tinycolor2: 1.6.0
       zod: 4.6.7
@@ -8640,40 +8640,40 @@ snapshots:
     optionalDependencies:
       '@pkgjs/parseargs': 0.11.0
 
-  jimp@2.2.0:
+  jimp@2.2.1:
     dependencies:
-      '@jimp/core': 2.2.0
-      '@jimp/diff': 2.2.0
-      '@jimp/js-bmp': 2.2.0
-      '@jimp/js-gif': 2.2.0
-      '@jimp/js-ico': 2.2.0
-      '@jimp/js-jpeg': 2.2.0
-      '@jimp/js-png': 2.2.0
-      '@jimp/js-tiff': 2.2.0
-      '@jimp/plugin-blit': 2.2.0
-      '@jimp/plugin-blur': 2.2.0
-      '@jimp/plugin-border': 2.2.0
-      '@jimp/plugin-circle': 2.2.0
-      '@jimp/plugin-color': 2.2.0
-      '@jimp/plugin-contain': 2.2.0
-      '@jimp/plugin-cover': 2.2.0
-      '@jimp/plugin-crop': 2.2.0
-      '@jimp/plugin-displace': 2.2.0
-      '@jimp/plugin-dither': 2.2.0
-      '@jimp/plugin-draw': 2.2.0
-      '@jimp/plugin-fisheye': 2.2.0
-      '@jimp/plugin-flip': 2.2.0
-      '@jimp/plugin-hash': 2.2.0
-      '@jimp/plugin-lut': 2.2.0
-      '@jimp/plugin-mask': 2.2.0
-      '@jimp/plugin-morphology': 2.2.0
-      '@jimp/plugin-print': 2.2.0
-      '@jimp/plugin-quantize': 2.2.0
-      '@jimp/plugin-resize': 2.2.0
-      '@jimp/plugin-rotate': 2.2.0
-      '@jimp/plugin-threshold': 2.2.0
-      '@jimp/types': 2.2.0
-      '@jimp/utils': 2.2.0
+      '@jimp/core': 2.2.1
+      '@jimp/diff': 2.2.1
+      '@jimp/js-bmp': 2.2.1
+      '@jimp/js-gif': 2.2.1
+      '@jimp/js-ico': 2.2.1
+      '@jimp/js-jpeg': 2.2.1
+      '@jimp/js-png': 2.2.1
+      '@jimp/js-tiff': 2.2.1
+      '@jimp/plugin-blit': 2.2.1
+      '@jimp/plugin-blur': 2.2.1
+      '@jimp/plugin-border': 2.2.1
+      '@jimp/plugin-circle': 2.2.1
+      '@jimp/plugin-color': 2.2.1
+      '@jimp/plugin-contain': 2.2.1
+      '@jimp/plugin-cover': 2.2.1
+      '@jimp/plugin-crop': 2.2.1
+      '@jimp/plugin-displace': 2.2.1
+      '@jimp/plugin-dither': 2.2.1
+      '@jimp/plugin-draw': 2.2.1
+      '@jimp/plugin-fisheye': 2.2.1
+      '@jimp/plugin-flip': 2.2.1
+      '@jimp/plugin-hash': 2.2.1
+      '@jimp/plugin-lut': 2.2.1
+      '@jimp/plugin-mask': 2.2.1
+      '@jimp/plugin-morphology': 2.2.1
+      '@jimp/plugin-print': 2.2.1
+      '@jimp/plugin-quantize': 2.2.1
+      '@jimp/plugin-resize': 2.2.1
+      '@jimp/plugin-rotate': 2.2.1
+      '@jimp/plugin-threshold': 2.2.1
+      '@jimp/types': 2.2.1
+      '@jimp/utils': 2.2.1
     transitivePeerDependencies:
       - supports-color
 

@@ -48,36 +48,6 @@ interface Fonts {
   bold: Font;
 }
 
-/**
- * GSUB features turned off after loading.
- *
- * Hanken Grotesk's `ccmp` uses a chained-context substitution (lookup type 6,
- * format 2) that opentype.js 2.0 does not implement, and `@jimp/plugin-print`
- * runs opentype's default shaping on every line with no way to opt out — so
- * the first `Text` throws `lookupType: 6 - substFormat: 2 is not yet
- * supported`. `ccmp` only composes base letters with combining marks;
- * precomposed text (what names and descriptions are) does not need it.
- *
- * Remove once opentype.js supports the lookup, or plugin-print can shape
- * without a feature.
- */
-const UNSUPPORTED_FEATURES = new Set(["ccmp"]);
-
-interface GsubFeatureRecord {
-  tag: string;
-}
-
-/**
- * Rename the given GSUB features so opentype.js's shaper never finds them.
- * Renaming, not removing: the script tables refer to features by index.
- */
-function disableFeatures(font: Font, tags: ReadonlySet<string>): void {
-  const gsub = (font.opentype.tables as { gsub?: { features?: GsubFeatureRecord[] } }).gsub;
-  for (const record of gsub?.features ?? []) {
-    if (tags.has(record.tag)) record.tag = `x${record.tag.slice(1)}`;
-  }
-}
-
 let fontsPromise: Promise<Fonts> | null = null;
 
 /** Hanken Grotesk, the app's one family (DESIGN.md §3), loaded once. */
@@ -85,15 +55,12 @@ function fonts(): Promise<Fonts> {
   fontsPromise ??= (async () => {
     // Read the bytes here rather than handing `loadTTF` a path: it treats a
     // string as something to fetch, and a percent-encoded file path is not one.
-    const load = async (weight: string) => {
-      const font = await loadTTF(
+    const load = async (weight: string) =>
+      loadTTF(
         await Bun.file(
           fileURLToPath(new URL(`./fonts/HankenGrotesk-${weight}.ttf`, import.meta.url)),
         ).arrayBuffer(),
       );
-      disableFeatures(font, UNSUPPORTED_FEATURES);
-      return font;
-    };
     const [regular, medium, semibold, bold] = await Promise.all([
       load("Regular"),
       load("Medium"),
