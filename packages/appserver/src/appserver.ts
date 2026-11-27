@@ -124,6 +124,7 @@ import { getArbiterConfig, type ArbiterConfig } from "./arbiter/config.ts";
 
 import { proxyBlob } from "./blob.ts";
 import { log } from "./log.ts";
+import { createOgRoutes } from "./og/routes.ts";
 import { metrics } from "./metrics.ts";
 import { resolveBuildId } from "./telemetry/build.ts";
 import { initTracing, shutdownTracing } from "./telemetry/tracing.ts";
@@ -652,6 +653,10 @@ export function metricEndpoint(
   // either way (the route is one of a fixed set), but folding it keeps every
   // path-parameterised route named by its stable prefix.
   if (pathname.startsWith("/webhooks/test/")) return "/webhooks/test";
+  // Open Graph: the card's path names a space and the join page's may name a
+  // ref, so each is one route.
+  if (pathname.startsWith("/og/space/")) return "/og/space";
+  if (pathname === "/og/join" || pathname.startsWith("/og/join/")) return "/og/join";
   // An XRPC nsid is an endpoint when the route table has it. A scanner's
   // `/xrpc/anything` is not: it is refused with a 404 and belongs on the
   // catch-all, not on a label of its own.
@@ -672,6 +677,8 @@ export async function createAppserver(
   const serviceEndpoint = opts.serviceEndpoint ?? process.env.APPSERVER_ORIGIN ?? "https://api.roomy.space";
   const corsOrigin = opts.corsOrigin ?? process.env.CORS_ORIGIN ?? "*";
   const quiet = opts.quiet ?? false;
+  // Invite-link unfurls: the card image and the page a crawler is given.
+  const handleOg = createOgRoutes({ serviceEndpoint });
 
   // ─── Tracing ────────────────────────────────────────────────────────
   // Install the OTLP tracer provider before any request is served, so every
@@ -1353,6 +1360,14 @@ export async function createAppserver(
         return new Response(metrics.render(), {
           headers: { "content-type": "text/plain; version=0.0.4; charset=utf-8", ...corsHeaders },
         });
+      }
+
+      const og = await handleOg(req, url);
+      if (og !== null) {
+        for (const [k, v] of Object.entries(corsHeaders)) {
+          og.headers.set(k, v);
+        }
+        return og;
       }
 
       const blobMatch = url.pathname.match(/^\/blob\/(.+?)\/(.+)$/);

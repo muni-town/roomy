@@ -27,7 +27,10 @@
 
       Per-page overrides (space avatar, room name) cannot reach a crawler
       without server rendering, so these are the site defaults every URL
-      unfurls with. SeoMeta still emits its own og/twitter tags at runtime for
+      unfurls with — except join links: the host's Caddyfile hands a
+      link-preview crawler's `/join` request to the appserver, which answers
+      with the space's name and its invite card
+      (`packages/appserver/src/og/`). SeoMeta still emits its own og/twitter tags at runtime for
       client-side navigation; Svelte's head block appends rather than
       reconciling with the static tags (the static `description` above already
       coexists with SeoMeta's the same way), which is harmless here — a

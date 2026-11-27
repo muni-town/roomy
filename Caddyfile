@@ -2,6 +2,37 @@
 :80 {
 	root * /usr/share/caddy
 
+	# Invite-link unfurls. A join link (`/join?space=…&invite=…`, or
+	# `/join/<ref>`) is the same SPA shell for every space, and a link-preview
+	# crawler never runs the bundle that would name the space — so it would
+	# unfurl as the site-wide card. A crawler's request is instead answered by
+	# the appserver (`packages/appserver/src/og/`): a page whose og tags name the
+	# space and whose og:image is that space's invite card. People still get
+	# the SPA below.
+	#
+	# Matched by User-Agent: the link-preview fetchers of the chat apps and
+	# social sites a join link is pasted into (iMessage sends
+	# facebookexternalhit/Twitterbot; Signal sends WhatsApp). Search crawlers
+	# are deliberately absent. A browser that matches by accident gets a page
+	# with an "Open in Roomy" link, not a broken app.
+	#
+	# APPSERVER_ORIGIN is read when Caddy loads this file; it defaults to the
+	# production appserver. Host is rewritten to the upstream's: the appserver
+	# sits behind its own host-routed edge.
+	@join path /join /join/*
+	header @join +Vary User-Agent
+
+	@unfurl {
+		path /join /join/*
+		header_regexp User-Agent "(?i)(facebookexternalhit|facebot|twitterbot|discordbot|slackbot|slack-imgproxy|linkedinbot|whatsapp|telegrambot|skypeuripreview|microsoftpreview|redditbot|mastodon|bluesky|cardyb|embedly|iframely|pinterest|vkshare|tumblr|snap url preview|zulipurlpreview|synapse|mattermost|rocket\.chat|applebot)"
+	}
+	handle @unfurl {
+		rewrite * /og{uri}
+		reverse_proxy {$APPSERVER_ORIGIN:https://api.roomy.space} {
+			header_up Host {upstream_hostport}
+		}
+	}
+
 	# Content-hashed build output. The filename changes whenever the content
 	# does, so a hit is safe to cache forever — and a miss MUST 404, never fall
 	# back to the SPA shell. Serving index.html (200 text/html) under a .js/.css

@@ -201,6 +201,14 @@ is not solved here.
 
 ### 2.4 `user/[user]`, `join/[[spaceRef]]`
 
+> **Update (2026-11-27):** join links no longer wait on M2. The app host's
+> `Caddyfile` routes a link-preview crawler's `/join` request (matched by
+> User-Agent) to the appserver's `/og/join`, which answers with the space's
+> name, description and a rendered invite card (`/og/space/<did>.png`, drawn
+> by `packages/appserver/src/og/`). People still get the static SPA. When the
+> server build lands, the `join` route can take this over and the Caddy rule
+> can go; the card endpoint stays useful either way.
+
 - **`user/[user]`** — profile unfurls. `space.roomy.user.getProfile` takes no
   auth at all (its handler ignores `_auth`), so the server load is the same
   shape. Worth folding into M1: a profile link is shared as often as a space
