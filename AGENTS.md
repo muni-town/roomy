@@ -174,24 +174,6 @@ Bun/TypeScript service providing the XRPC interface. The appserver materialises 
 
 See `packages/appserver/docs/plans/appserver-architecture.md` for full spec, research requirements, and migration phases.
 
-### Invite-link unfurls (the one server-rendered head)
-
-app-lite is a static SPA, so a crawler unfurling `roomy.space/join?space=…`
-would only ever see the site-wide card in `app.html`. Join links are the
-exception: the `Caddyfile` sends a link-preview crawler's `/join` request
-(matched by User-Agent, `Vary: User-Agent` on both branches) to the
-appserver's `/og/join`, which returns a small page whose og tags name the
-space and point at `/og/space/<did>.png`, an invite card drawn in the site
-card's design language with `@jimp/layout` (pure JS, no native or WASM
-step). The card's colours come from the space's avatar (`og/color.ts`, via
-Jimp's `palette`): a pale canvas tinted to the avatar's main colour, its most
-vivid colour as the accent, deep ink in the canvas's hue. Text contrast is
-enforced after derivation (darkened until it meets WCAG), never assumed; a
-colourless avatar keeps the site card's palette. Code: `packages/appserver/src/og/`. The card reads only what
-`space.roomy.space.getMetadata` already answers anonymously. `APPSERVER_ORIGIN`
-is read by both the appserver (for the absolute og:image URL) and Caddy (for
-the upstream).
-
 ## Package: happyview (profile index service)
 
 HappyView is a lexicon-driven ATProto AppView written in Rust. It subscribes to the Jetstream firehose, indexes ATProto records by collection, and serves XRPC query endpoints — configurable with Lua scripts for custom logic. See https://happyview.dev for full documentation.
