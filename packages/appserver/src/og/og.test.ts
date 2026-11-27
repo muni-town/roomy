@@ -6,6 +6,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { wcagContrast } from "culori";
 import { Jimp } from "jimp";
 import { metricEndpoint } from "../appserver.ts";
 import { imageDimensions, isFetchableUrl, parseAtblob } from "./card.ts";
@@ -15,10 +16,12 @@ import { cardVersion } from "./routes.ts";
 import {
   DEFAULT_PALETTE,
   avatarColours,
-  contrastRatio,
   hexToOklch,
   oklchToHex,
   paletteForAvatar,
+  paletteFromColours,
+  type AvatarColour,
+  type CardPalette,
 } from "./color.ts";
 
 /** `#rrggbb` of the pixel at (x, y). */
@@ -229,18 +232,41 @@ describe("the space's colour", () => {
     }
   });
 
-  test("no avatar colour makes the text unreadable", () => {
-    for (let h = 0; h < 360; h += 15) {
-      for (const l of [0.3, 0.55, 0.8, 0.93]) {
-        for (const c of [0.07, 0.15, 0.3]) {
-          const p = paletteForAvatar(avatar(rgba(oklchToHex({ l, c, h }))));
-          const where = `${JSON.stringify({ l, c, h })} → ${JSON.stringify(p)}`;
-          // The wordmark is 40px bold — large text, so WCAG's floor is 3:1.
-          expect(contrastRatio(p.wordmark, p.canvas), where).toBeGreaterThanOrEqual(3);
-          expect(contrastRatio(p.ink, p.canvas), where).toBeGreaterThanOrEqual(7);
-          expect(contrastRatio(p.inkSoft, p.canvas), where).toBeGreaterThanOrEqual(4.5);
-          expect(contrastRatio(p.ink, p.pill), where).toBeGreaterThanOrEqual(7);
-        }
+  /** Every text colour of `p` meets its WCAG floor; `where` names the case on failure. */
+  function expectReadable(p: CardPalette, where: string) {
+    // The wordmark is 40px bold — large text, so WCAG's floor is 3:1.
+    expect(wcagContrast(p.wordmark, p.canvas), where).toBeGreaterThanOrEqual(3);
+    expect(wcagContrast(p.ink, p.canvas), where).toBeGreaterThanOrEqual(7);
+    expect(wcagContrast(p.inkSoft, p.canvas), where).toBeGreaterThanOrEqual(4.5);
+    expect(wcagContrast(p.ink, p.pill), where).toBeGreaterThanOrEqual(7);
+  }
+
+  // Avatar colours straight into the derivation: the guarantee is about the
+  // palette maths, not the quantizer, and skipping it keeps this exhaustive.
+  const grid = (hueStep: number, ls: number[], cs: number[]): AvatarColour[] => {
+    const out: AvatarColour[] = [];
+    for (let h = 0; h < 360; h += hueStep) {
+      for (const l of ls) for (const c of cs) out.push({ ...hexToOklch(oklchToHex({ l, c, h })), weight: 1 });
+    }
+    return out;
+  };
+
+  test("no single avatar colour makes the text unreadable", () => {
+    for (const colour of grid(10, [0.2, 0.4, 0.6, 0.8, 0.95], [0.06, 0.15, 0.3])) {
+      expectReadable(paletteFromColours([colour]), JSON.stringify(colour));
+    }
+  });
+
+  test("no pairing of main colour and accent makes the text unreadable", () => {
+    const colours = grid(45, [0.25, 0.6, 0.9], [0.08, 0.3]);
+    for (const main of colours) {
+      for (const accent of colours) {
+        // `main` covers more of the avatar; `accent` is more vivid.
+        const pair = [
+          { ...main, weight: 0.7 },
+          { ...accent, c: Math.max(accent.c, main.c + 0.01), weight: 0.3 },
+        ];
+        expectReadable(paletteFromColours(pair), JSON.stringify(pair));
       }
     }
   });

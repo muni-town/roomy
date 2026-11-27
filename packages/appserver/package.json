@@ -30,6 +30,7 @@
     "@qdrant/js-client-rest": "^1.19.0",
     "@roomy-space/sdk": "workspace:*",
     "arktype": "^2.1.29",
+    "culori": "^4.0.2",
     "jimp": "^2.2.0",
     "rate-limiter-flexible": "^11.2.0",
     "ulidx": "^2.4.1",
@@ -37,6 +38,7 @@
   },
   "devDependencies": {
     "@repo/tsconfig": "workspace:*",
+    "@types/culori": "^4.0.1",
     "bun-types": "latest",
     "typescript": "^5.8.3"
   }
