@@ -11,9 +11,10 @@
  */
 
 import { Jimp } from "jimp";
-import { openGlobalDb, openSpaceDb, spaceExists } from "../db/db.ts";
+import { openGlobalDb } from "../db/db.ts";
+import { getMetadataHandler } from "../handlers/space.roomy.space.getMetadata.ts";
 import { resolvePdsEndpoint } from "../identity.ts";
-import { getSpaceHandle } from "../queries/spaceHandles.ts";
+import { XrpcError } from "../xrpc/errors.ts";
 import type { AvatarImage, SpaceCardData } from "./render.ts";
 
 /** A space's card data, plus the stored avatar reference it was read with. */
@@ -25,48 +26,32 @@ export interface SpaceCard extends SpaceCardData {
 /**
  * Read a space's card data, or `null` when there is no such space.
  *
- * `spaceExists` comes first because opening a space DB creates it: an unknown
- * id must not leave an empty database behind (the same rule `getMetadata`
- * follows).
+ * The space's fields come from `getMetadataHandler` itself, called as an
+ * anonymous caller, so the card shows exactly what that endpoint answers a
+ * signed-out visitor — by construction, not by a second query that could
+ * drift from it. Only the member count, which it doesn't carry, is read here.
  */
 export async function loadSpaceCard(spaceId: string): Promise<SpaceCard | null> {
-  if (!(await spaceExists(spaceId))) return null;
+  let meta: Awaited<ReturnType<typeof getMetadataHandler>>;
+  try {
+    meta = await getMetadataHandler({ spaceId }, { did: null });
+  } catch (err) {
+    if (err instanceof XrpcError && err.status === 404) return null;
+    throw err;
+  }
 
-  const row = await openSpaceDb(spaceId)
-    .query(
-      `select ci.name as name,
-              ci.avatar as avatar,
-              ci.description as description,
-              cs.allow_public_join as allow_public_join
-         from comp_space cs
-         left join comp_info ci on ci.entity = cs.entity
-        where cs.entity = ?`,
-    )
-    .get<{
-      name: string | null;
-      avatar: string | null;
-      description: string | null;
-      allow_public_join: number | null;
-    }>(spaceId);
-  if (row === null) return null;
-
-  const globalDb = openGlobalDb();
-  const [handle, stats] = await Promise.all([
-    getSpaceHandle(spaceId, globalDb),
-    globalDb
-      .query("select member_count from space_stats where space_did = ?")
-      .get<{ member_count: number }>(spaceId),
-  ]);
+  const stats = await openGlobalDb()
+    .query("select member_count from space_stats where space_did = ?")
+    .get<{ member_count: number }>(spaceId);
 
   const card: SpaceCard = {
-    name: row.name?.trim() || "A Roomy space",
-    // NULL is open: the access check reads `coalesce(allow_public_join, 1)`.
-    allowPublicJoin: row.allow_public_join !== 0,
+    name: meta.name?.trim() || "A Roomy space",
+    allowPublicJoin: meta.joinPolicy.allowPublicJoin,
   };
-  const description = row.description?.trim();
+  const description = meta.description?.trim();
   if (description) card.description = description;
-  if (row.avatar) card.avatarRef = row.avatar;
-  if (handle) card.handle = handle;
+  if (meta.avatar) card.avatarRef = meta.avatar;
+  if (meta.handle) card.handle = meta.handle;
   if (stats) card.memberCount = stats.member_count;
   return card;
 }
@@ -136,55 +121,28 @@ async function fetchBytes(url: string): Promise<Buffer | null> {
 }
 
 /**
- * The most pixels an avatar may declare. Decoding allocates width × height × 4
- * bytes up front, and a flat image compresses to almost nothing, so the byte
- * cap alone does not bound memory: a 40 KB PNG can declare 20000×20000.
+ * The most megapixels an avatar may declare. Decoding allocates
+ * width × height × 4 bytes, and a flat image compresses to almost nothing, so
+ * the byte cap alone does not bound memory: a 40 KB PNG can declare
+ * 20000×20000. Each of Jimp's decoders checks this against the header and
+ * refuses before allocating.
  */
-const AVATAR_MAX_PIXELS = 16_000_000;
+const AVATAR_MAX_MP = 16;
+export const DECODE_LIMITS = Object.fromEntries(
+  ["image/png", "image/jpeg", "image/gif", "image/bmp", "image/x-ms-bmp", "image/tiff"].map(
+    (mime) => [mime, { maxResolutionInMP: AVATAR_MAX_MP }],
+  ),
+) as Parameters<typeof Jimp.read>[1];
 
 /**
- * The dimensions a PNG, GIF or JPEG header declares, or `null` for anything
- * else (which is then not decoded).
+ * Decode an avatar, or `null` when it is too large or not an image Jimp
+ * reads (WebP, HEIC, SVG, anything else): the card then shows the initial.
  */
-export function imageDimensions(bytes: Buffer): { width: number; height: number } | null {
-  // PNG: signature, then IHDR's width and height.
-  if (bytes.length >= 24 && bytes.readUInt32BE(0) === 0x89504e47) {
-    return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
-  }
-  // GIF: logical screen size, little-endian.
-  if (bytes.length >= 10 && bytes.toString("ascii", 0, 3) === "GIF") {
-    return { width: bytes.readUInt16LE(6), height: bytes.readUInt16LE(8) };
-  }
-  // JPEG: walk the segments to the first start-of-frame.
-  if (bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8) {
-    let i = 2;
-    while (i + 9 < bytes.length) {
-      if (bytes[i] !== 0xff) return null;
-      const marker = bytes[i + 1]!;
-      if (marker === 0xff) {
-        i += 1; // fill byte
-        continue;
-      }
-      const isFrame =
-        marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
-      if (isFrame) {
-        return { width: bytes.readUInt16BE(i + 7), height: bytes.readUInt16BE(i + 5) };
-      }
-      i += 2 + bytes.readUInt16BE(i + 2);
-    }
-  }
-  return null;
-}
-
-/** Decode a PNG, GIF or JPEG avatar of a sane size, or `null`. */
-async function decode(bytes: Buffer | null): Promise<AvatarImage | null> {
+export async function decodeAvatar(bytes: Buffer | null): Promise<AvatarImage | null> {
   if (bytes === null) return null;
-  const size = imageDimensions(bytes);
-  if (size === null || size.width * size.height > AVATAR_MAX_PIXELS) return null;
   try {
-    return await Jimp.read(bytes);
+    return await Jimp.read(bytes, DECODE_LIMITS);
   } catch {
-    // WebP, HEIC, SVG or not an image at all: the card falls back to the initial.
     return null;
   }
 }
@@ -211,11 +169,11 @@ export function parseAtblob(ref: string): { did: string; cid: string } | null {
  */
 export async function fetchAvatar(ref: string): Promise<AvatarImage | null> {
   const blob = parseAtblob(ref);
-  if (blob === null) return decode(await fetchBytes(ref));
+  if (blob === null) return decodeAvatar(await fetchBytes(ref));
 
   const did = encodeURIComponent(blob.did);
   const cid = encodeURIComponent(blob.cid);
-  const fromCdn = await decode(
+  const fromCdn = await decodeAvatar(
     await fetchBytes(`https://cdn.bsky.app/img/avatar/plain/${did}/${cid}@jpeg`),
   );
   if (fromCdn) return fromCdn;
@@ -226,7 +184,7 @@ export async function fetchAvatar(ref: string): Promise<AvatarImage | null> {
   } catch {
     return null;
   }
-  return decode(
+  return decodeAvatar(
     await fetchBytes(`${pds}/xrpc/com.atproto.sync.getBlob?did=${did}&cid=${cid}`),
   );
 }

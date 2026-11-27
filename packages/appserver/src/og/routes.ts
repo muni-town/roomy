@@ -14,6 +14,7 @@
  * gets the site-wide card and copy, never an error page.
  */
 
+import { LRUCache } from "lru-cache";
 import { log } from "../log.ts";
 import { fetchAvatar, loadSpaceCard, spaceForHandle, type SpaceCard } from "./card.ts";
 import { SITE_OG_IMAGE, renderInvitePage } from "./html.ts";
@@ -59,12 +60,6 @@ function isSpaceDid(value: string): boolean {
   return /^did:[a-z]+:[A-Za-z0-9._:%-]{1,200}$/.test(value);
 }
 
-interface CachedCard {
-  version: string;
-  png: Buffer;
-  expiresAt: number;
-}
-
 export interface OgRoutesOptions {
   /** The appserver's public origin, for the absolute og:image URL. */
   serviceEndpoint: string;
@@ -75,8 +70,6 @@ export interface OgRoutesOptions {
 export function createOgRoutes(opts: OgRoutesOptions) {
   const origin = opts.serviceEndpoint.replace(/\/+$/, "");
   const loadAvatar = opts.fetchAvatar ?? fetchAvatar;
-  const cache = new Map<string, CachedCard>();
-  const inflight = new Map<string, Promise<CachedCard>>();
   // Rendering is synchronous CPU work on the event loop (~100 ms a card), so
   // renders run one at a time rather than stacking up behind each other.
   // Avatar fetches are I/O and run alongside: a slow avatar host must not
@@ -90,41 +83,23 @@ export function createOgRoutes(opts: OgRoutesOptions) {
     return next;
   }
 
-  function remember(spaceId: string, entry: CachedCard): void {
-    cache.delete(spaceId);
-    cache.set(spaceId, entry);
-    while (cache.size > CACHE_MAX_ENTRIES) {
-      cache.delete(cache.keys().next().value!);
-    }
-  }
-
-  function draw(spaceId: string, card: SpaceCard, version: string): Promise<CachedCard> {
-    const key = `${spaceId}@${version}`;
-    const pending = inflight.get(key);
-    if (pending) return pending;
-
-    if (drawing >= MAX_QUEUED_RENDERS) {
-      return Promise.reject(new Error("og render queue full"));
-    }
-    drawing += 1;
-    const job = (async () => {
-      const avatar = card.avatarRef ? await loadAvatar(card.avatarRef) : null;
-      const png = await serially(() => renderSpaceCard(card, avatar));
-      const degraded = card.avatarRef !== undefined && avatar === null;
-      const entry: CachedCard = {
-        version,
-        png,
-        expiresAt: Date.now() + (degraded ? DEGRADED_TTL_MS : CACHE_TTL_MS),
-      };
-      remember(spaceId, entry);
-      return entry;
-    })().finally(() => {
-      drawing -= 1;
-      inflight.delete(key);
-    });
-    inflight.set(key, job);
-    return job;
-  }
+  // Keyed by space and card version, so a changed space misses and is drawn
+  // afresh. `fetch` shares one draw among concurrent requests for a card.
+  const cards = new LRUCache<string, Buffer, SpaceCard>({
+    max: CACHE_MAX_ENTRIES,
+    ttl: CACHE_TTL_MS,
+    fetchMethod: async (_key, _stale, { context: card, options }) => {
+      if (drawing >= MAX_QUEUED_RENDERS) throw new Error("og render queue full");
+      drawing += 1;
+      try {
+        const avatar = card.avatarRef ? await loadAvatar(card.avatarRef) : null;
+        if (card.avatarRef !== undefined && avatar === null) options.ttl = DEGRADED_TTL_MS;
+        return await serially(() => renderSpaceCard(card, avatar));
+      } finally {
+        drawing -= 1;
+      }
+    },
+  });
 
   /** Send the crawler to the site-wide card. */
   function siteCard(): Response {
@@ -152,20 +127,18 @@ export function createOgRoutes(opts: OgRoutesOptions) {
       return new Response(null, { status: 304, headers: { etag } });
     }
 
-    let entry = cache.get(spaceId);
-    if (!entry || entry.version !== version || entry.expiresAt < Date.now()) {
-      try {
-        entry = await draw(spaceId, card, version);
-      } catch (err) {
-        log.warn(`[og] could not draw space ${spaceId}: ${String(err)}`);
-        return siteCard();
-      }
+    let png: Buffer | undefined;
+    try {
+      png = await cards.fetch(`${spaceId}@${version}`, { context: card });
+    } catch (err) {
+      log.warn(`[og] could not draw space ${spaceId}: ${String(err)}`);
     }
+    if (png === undefined) return siteCard();
 
-    return new Response(req.method === "HEAD" ? null : new Uint8Array(entry.png), {
+    return new Response(req.method === "HEAD" ? null : new Uint8Array(png), {
       headers: {
         "content-type": "image/png",
-        "content-length": String(entry.png.byteLength),
+        "content-length": String(png.byteLength),
         etag,
         "cache-control": "public, max-age=3600, stale-while-revalidate=86400",
       },

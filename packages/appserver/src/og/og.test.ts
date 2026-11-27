@@ -9,9 +9,9 @@ import { describe, expect, test } from "bun:test";
 import { wcagContrast } from "culori";
 import { Jimp } from "jimp";
 import { metricEndpoint } from "../appserver.ts";
-import { imageDimensions, isFetchableUrl, parseAtblob } from "./card.ts";
+import { DECODE_LIMITS, decodeAvatar, isFetchableUrl, parseAtblob } from "./card.ts";
 import { SITE_OG_IMAGE, escapeHtml, renderInvitePage } from "./html.ts";
-import { initialOf, memberLabel, renderSpaceCard, truncate } from "./render.ts";
+import { initialOf, memberLabel, renderSpaceCard } from "./render.ts";
 import { cardVersion } from "./routes.ts";
 import {
   DEFAULT_PALETTE,
@@ -72,23 +72,44 @@ describe("parseAtblob", () => {
   );
 });
 
-describe("imageDimensions", () => {
-  test("reads a PNG and a JPEG header", async () => {
-    const image = new Jimp({ width: 37, height: 21, color: 0xff0000ff });
-    expect(imageDimensions(await image.getBuffer("image/png"))).toEqual({ width: 37, height: 21 });
-    expect(imageDimensions(await image.getBuffer("image/jpeg"))).toEqual({ width: 37, height: 21 });
-  });
+describe("decodeAvatar", () => {
+  const small = () => new Jimp({ width: 37, height: 21, color: 0xff0000ff });
 
-  test("reports what a header declares, so a decompression bomb is caught before decoding", async () => {
-    const png = Buffer.from(await new Jimp({ width: 1, height: 1 }).getBuffer("image/png"));
+  /** A 1×1 PNG whose header (CRC fixed up) claims 20000×20000. */
+  async function pngBomb() {
+    const png = Buffer.from(await small().getBuffer("image/png"));
     png.writeUInt32BE(20_000, 16);
     png.writeUInt32BE(20_000, 20);
-    expect(imageDimensions(png)).toEqual({ width: 20_000, height: 20_000 });
+    png.writeUInt32BE(Bun.hash.crc32(png.subarray(12, 29)), 29);
+    return png;
+  }
+
+  /** A small JPEG whose start-of-frame claims 65535×65535. */
+  async function jpegBomb() {
+    const jpeg = Buffer.from(await small().getBuffer("image/jpeg"));
+    const sof = jpeg.indexOf(Buffer.from([0xff, 0xc0]));
+    jpeg.writeUInt16BE(0xffff, sof + 5);
+    jpeg.writeUInt16BE(0xffff, sof + 7);
+    return jpeg;
+  }
+
+  test.each(["image/png", "image/jpeg", "image/gif"] as const)("decodes a %s avatar", async (mime) => {
+    const image = await decodeAvatar(Buffer.from(await small().getBuffer(mime)));
+    expect([image?.width, image?.height]).toEqual([37, 21]);
   });
 
-  test("anything else is not an image it will decode", () => {
-    expect(imageDimensions(Buffer.from("RIFF\0\0\0\0WEBPVP8 "))).toBeNull();
-    expect(imageDimensions(Buffer.from("<svg/>"))).toBeNull();
+  test("Jimp's decoders refuse an oversized image from its header, before decoding it", async () => {
+    // The refusal must be the size limit, not the bytes being malformed.
+    await expect(Jimp.read(await pngBomb(), DECODE_LIMITS)).rejects.toThrow(/megapixels/);
+    await expect(Jimp.read(await jpegBomb(), DECODE_LIMITS)).rejects.toThrow(/maxResolutionInMP/);
+    expect(await decodeAvatar(await pngBomb())).toBeNull();
+    expect(await decodeAvatar(await jpegBomb())).toBeNull();
+  });
+
+  test("anything Jimp doesn't read leaves the initial", async () => {
+    expect(await decodeAvatar(Buffer.from("RIFF\0\0\0\0WEBPVP8 "))).toBeNull();
+    expect(await decodeAvatar(Buffer.from("<svg/>"))).toBeNull();
+    expect(await decodeAvatar(null)).toBeNull();
   });
 });
 
@@ -102,12 +123,6 @@ describe("card text", () => {
     expect(initialOf("  roomy")).toBe("R");
     expect(initialOf("été")).toBe("É");
     expect(initialOf("")).toBe("R");
-  });
-
-  test("truncate counts code points and ends in an ellipsis", () => {
-    expect(truncate("short", 10)).toBe("short");
-    expect(truncate("abcdefghij", 5)).toBe("abcd…");
-    expect([...truncate("🌱🌱🌱🌱🌱🌱", 4)]).toHaveLength(4);
   });
 });
 

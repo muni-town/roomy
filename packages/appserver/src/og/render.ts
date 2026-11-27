@@ -136,12 +136,6 @@ export function drawable(text: string, font: Font): string {
   return out.replace(/ {2,}/g, " ").trim();
 }
 
-/** Shorten `text` to `max` characters (code points), ending in an ellipsis. */
-export function truncate(text: string, max: number): string {
-  const chars = [...text];
-  return chars.length <= max ? text : `${chars.slice(0, max - 1).join("").trimEnd()}…`;
-}
-
 // The disc sits where the site card's door blob does.
 const DISC = { left: 772, top: 138, size: 360, ring: 18 } as const;
 
@@ -154,13 +148,15 @@ function pill(
   const placed = Object.keys(position).length > 0;
   return Box({
     ...(placed ? { position: "absolute" as const, ...position } : {}),
+    // A long label (a handle) is cut by width with an ellipsis, not overflowed.
+    maxWidth: 420,
     padding: [12, 28],
     radius: 999,
     background: colors.pill,
     borderWidth: 3,
     borderColor: colors.ink,
     shadow: [{ x: 3, y: 5, blur: 0, color: colors.pillShadow }],
-    children: Text({ font, fontSize: 30, color: colors.ink, children: label }),
+    children: Text({ font, fontSize: 30, color: colors.ink, maxLines: 1, children: label }),
   });
 }
 
@@ -218,7 +214,7 @@ export async function renderSpaceCard(
         width: DISC.size + 240,
         direction: "row",
         justify: "center",
-        children: pill(`@${truncate(handle, 24)}`, f.medium, colors, {}),
+        children: pill(`@${handle}`, f.medium, colors, {}),
       }),
     );
   }

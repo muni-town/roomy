@@ -261,6 +261,9 @@ importers:
       jimp:
         specifier: ^2.2.0
         version: 2.2.0
+      lru-cache:
+        specifier: ^11.5.3
+        version: 11.5.3
       rate-limiter-flexible:
         specifier: ^11.2.0
         version: 11.2.0
@@ -3895,6 +3898,10 @@ packages:
 
   lru-cache@10.4.3:
     resolution: {integrity: sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ==}
+
+  lru-cache@11.5.3:
+    resolution: {integrity: sha512-U4N8FgzmWxc8k1VH8Kr6lQg18U7Fjvby6wXHVRX/ZZ7IwWbRMgrRbP0Wrb5q5NVinryp4SQampHKdvtecItxUg==}
+    engines: {node: 20 || >=22}
 
   lz-string@1.5.0:
     resolution: {integrity: sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ==}
@@ -8871,6 +8878,8 @@ snapshots:
       highlight.js: 11.11.1
 
   lru-cache@10.4.3: {}
+
+  lru-cache@11.5.3: {}
 
   lz-string@1.5.0: {}
 
